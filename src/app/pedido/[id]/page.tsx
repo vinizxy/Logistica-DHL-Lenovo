@@ -3,17 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback } from "react";
-import {
-  ACTOR_LABEL,
-  describeEvent,
-  fmtDate,
-  fmtOrderId,
-  STATUS_FLOW,
-  STATUS_LABEL,
-} from "@/lib/format";
+import { ACTOR_LABEL, describeEvent, fmtDate, fmtOrderId } from "@/lib/format";
 import { fetchOrder, fetchOrderEvents } from "@/lib/queries";
-import type { Order, OrderEvent } from "@/lib/types";
+import type { OrderEvent } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
+import { Timeline } from "@/components/Timeline";
 import { ConnectionBanner, Empty, ErrorBox, Section, StatusBadge } from "@/components/ui";
 
 export default function OrderPage() {
@@ -98,88 +92,6 @@ export default function OrderPage() {
           </table>
         </Section>
       </div>
-    </>
-  );
-}
-
-function Timeline({ order, events }: { order: Order; events: OrderEvent[] }) {
-  const cancelled = order.status === "cancelado";
-  // Se cancelado, o último status do fluxo principal é onde parou.
-  const lastMain = cancelled
-    ? (events.filter((e) => e.to_status !== "cancelado").at(-1)?.to_status ?? "enviado")
-    : order.status;
-  const reachedIdx = STATUS_FLOW.indexOf(lastMain);
-  const done = order.status === "entregue";
-  const when = (s: string) => events.find((e) => e.to_status === s)?.created_at;
-
-  return (
-    <>
-    {/* Celular: vertical. */}
-    <ol className="space-y-0 sm:hidden">
-      {STATUS_FLOW.map((s, idx) => {
-        const reached = idx <= reachedIdx;
-        const isCurrent = idx === reachedIdx;
-        const ts = when(s);
-        const last = idx === STATUS_FLOW.length - 1;
-        const dot = cancelled && isCurrent
-          ? "border-muted bg-muted"
-          : isCurrent && !done
-            ? "border-red bg-red shadow-[0_0_0_4px_var(--color-red-soft)]"
-            : reached
-              ? "border-red bg-red"
-              : "border-line-strong bg-surface";
-        const line = idx < reachedIdx ? "bg-red" : "bg-line-strong";
-        return (
-          <li key={s} className="relative flex gap-3 pb-5 last:pb-0">
-            {!last && <div className={"absolute top-4 bottom-0 left-[7px] w-0.5 " + line} />}
-            <div className={"relative mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 " + dot} />
-            <div className="min-w-0">
-              <div className={"text-sm " + (isCurrent ? "font-semibold text-ink" : reached ? "text-ink-2" : "text-muted")}>
-                {STATUS_LABEL[s]}
-                {cancelled && isCurrent && <span className="ml-2 font-semibold text-red">Cancelado aqui</span>}
-              </div>
-              {ts && <div className="num text-xs text-muted">{fmtDate(ts)}</div>}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-    {/* Desktop: horizontal. */}
-    <ol className="hidden items-start sm:flex">
-      {STATUS_FLOW.map((s, idx) => {
-        const reached = idx <= reachedIdx;
-        const isCurrent = idx === reachedIdx;
-        const ts = when(s);
-        const dot = cancelled && isCurrent
-          ? "border-muted bg-muted"
-          : isCurrent && !done
-            ? "border-red bg-red shadow-[0_0_0_4px_var(--color-red-soft)]"
-            : reached
-              ? "border-red bg-red"
-              : "border-line-strong bg-surface";
-        const line = idx < reachedIdx ? "bg-red" : "bg-line-strong";
-        return (
-          <li key={s} className="relative flex-1">
-            {idx > 0 && <div className={"absolute top-[7px] right-1/2 left-[-50%] h-0.5 " + line} />}
-            <div className="relative flex flex-col items-center text-center">
-              <div className={"h-4 w-4 rounded-full border-2 " + dot} />
-              <div
-                className={
-                  "mt-2 text-xs " +
-                  (isCurrent ? "font-semibold text-ink" : reached ? "text-ink-2" : "text-muted")
-                }
-              >
-                {STATUS_LABEL[s]}
-                {cancelled && isCurrent && (
-                  <span className="block font-semibold text-red">Cancelado aqui</span>
-                )}
-              </div>
-              {ts && <div className="num mt-0.5 text-[11px] text-muted">{fmtDate(ts)}</div>}
-            </div>
-          </li>
-        );
-      })}
-    </ol>
     </>
   );
 }
