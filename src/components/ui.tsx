@@ -33,7 +33,7 @@ export function Nav() {
           <Image
             src="/lenovo-logo.png"
             alt="Lenovo"
-            width={237}
+            width={389}
             height={129}
             priority
             className="h-7 w-auto"
