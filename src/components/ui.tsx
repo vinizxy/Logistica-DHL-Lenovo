@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Connection } from "@/lib/useLiveData";
@@ -27,12 +28,20 @@ export function Nav() {
   return (
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4">
-        <Link href="/lenovo" className="flex items-center gap-2.5 py-3">
-          <span aria-hidden className="grid h-6 w-6 place-items-center bg-red">
-            <span className="h-2.5 w-2.5 border border-white/80" />
+        <Link href="/lenovo" className="flex items-center gap-3 py-2.5">
+          {/* Logo em public/lenovo-logo.png — trocar o arquivo troca a marca. */}
+          <Image
+            src="/lenovo-logo.png"
+            alt="Lenovo"
+            width={237}
+            height={129}
+            priority
+            className="h-7 w-auto"
+          />
+          <span className="border-l border-line-strong pl-3 text-[15px] font-semibold tracking-tight">
+            Caixas Refurbish
           </span>
-          <span className="text-[15px] font-semibold tracking-tight">Caixas Refurbish</span>
-          <span className="hidden text-sm text-muted sm:inline">Lenovo × DHL</span>
+          <span className="hidden text-sm text-muted sm:inline">com DHL</span>
         </Link>
         <nav className="flex">
           {link("/lenovo", "Lenovo")}
