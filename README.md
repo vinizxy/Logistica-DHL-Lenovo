@@ -13,9 +13,10 @@ pedido em tempo real.
 
 | Rota | Quem usa | O que faz |
 |---|---|---|
-| `/lenovo` | Linha de refurbish | Vê estoque disponível, monta pedido multi-item, acompanha pedidos, confirma entrega, cancela |
-| `/dhl` | Armazém | Fila de pedidos por etapa (um botão = próxima ação), estoque com alerta de mínimo, reposição |
-| `/pedido/[id]` | Ambos | Linha do tempo do pedido, itens, histórico de quem fez o quê e quando |
+| `/lenovo` | Linha de refurbish | Vê estoque disponível, monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela |
+| `/dhl` | Armazém | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com alerta de mínimo, reposição |
+| `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários entre Lenovo e DHL |
+| `/cadastro` | Admin | Catálogo de caixas: incluir modelo novo (serial gerado), editar nome/modelo/mínimo, descontinuar/reativar |
 
 ## Fluxo de um pedido
 
@@ -51,8 +52,9 @@ Migrações em `supabase/migrations/`, na ordem:
 1. `0001_schema.sql` — enums, tabelas, índices, RLS, Realtime
 2. `0002_functions.sql` — `create_order`, `advance_order`, `cancel_order`, `restock`
 3. `0003_seed.sql` — 13 tipos de caixa e 5 pedidos de exemplo (criados via funções)
+4. `0004_urgent_eta_comments_catalog.sql` — pedido urgente, previsão de entrega, comentários, cadastro de caixas
 
-Testes das regras: `supabase/tests/rules.sql`. Roda inteiro numa transação e termina com um
+Testes das regras: `supabase/tests/rules.sql` (29 asserções) e `supabase/tests/features.sql` (14). Roda inteiro numa transação e termina com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado. Cole no SQL Editor do Supabase
 e leia o relatório na mensagem de erro; sucesso = `0 falhas`.
 
@@ -68,6 +70,10 @@ e leia o relatório na mensagem de erro; sucesso = `0 falhas`.
 5. Tente pedir mais do que o disponível: o banco recusa e a tela mostra qual item estourou.
 6. Na DHL, `IdeaPad Slim 5` e `Legion Pro 7i` estão abaixo do mínimo (⚠). Reponha e veja o
    alerta sumir.
+7. Marque um pedido como **urgente**: ele sobe pro topo da fila da DHL com etiqueta vermelha.
+8. Ao **despachar**, a DHL informa a previsão de entrega; a Lenovo vê "chega hoje 14:00".
+9. Abra o pedido e deixe um **comentário** de um lado; o outro lado vê na hora.
+10. Em **Cadastro**, inclua um tipo de caixa novo e descontinue outro — ele some do pedido.
 
 ## Fora de escopo (por enquanto)
 

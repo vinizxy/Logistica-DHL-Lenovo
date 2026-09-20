@@ -9,7 +9,7 @@ import type { OrderStatus } from "@/lib/types";
 
 export function Nav() {
   const path = usePathname();
-  const link = (href: string, label: string) => {
+  const link = (href: string, label: string, panel = true) => {
     const active = path === href || path.startsWith(href + "/");
     return (
       <Link
@@ -19,7 +19,7 @@ export function Nav() {
           (active ? "text-ink" : "text-muted hover:text-ink-2")
         }
       >
-        <span className="hidden sm:inline">Painel </span>
+        {panel && <span className="hidden sm:inline">Painel </span>}
         {label}
         {active && <span className="absolute inset-x-3 -bottom-px h-0.5 bg-red" />}
       </Link>
@@ -46,6 +46,7 @@ export function Nav() {
         <nav className="flex">
           {link("/lenovo", "Lenovo")}
           {link("/dhl", "DHL")}
+          {link("/cadastro", "Cadastro", false)}
         </nav>
       </div>
     </header>
@@ -71,18 +72,11 @@ export function StatusBadge({ status }: { status: OrderStatus }) {
 }
 
 export function ConnectionBanner({ connection }: { connection: Connection }) {
-  if (connection === "online") return null;
-  const offline = connection === "offline";
+  // Só o estado offline merece aviso; "conectando" dura um instante e só distrai.
+  if (connection !== "offline") return null;
   return (
-    <div
-      className={
-        "border px-3 py-2 text-sm " +
-        (offline ? "border-red/40 bg-red-soft text-ink" : "border-line bg-surface text-muted")
-      }
-    >
-      {offline
-        ? "Sem conexão em tempo real. Tentando reconectar; os dados são atualizados a cada 15 s."
-        : "Conectando…"}
+    <div className="border border-red/40 bg-red-soft px-3 py-2 text-sm text-ink">
+      Sem conexão em tempo real. Tentando reconectar; os dados são atualizados a cada 15 s.
     </div>
   );
 }
@@ -170,6 +164,33 @@ export function Stats({ items }: { items: { value: React.ReactNode; label: strin
   );
 }
 
+/** Etiqueta de pedido urgente: linha parada esperando caixa. */
+export function UrgentBadge({ small }: { small?: boolean }) {
+  return (
+    <span
+      className={
+        "inline-flex items-center gap-1 bg-red font-semibold uppercase tracking-wide text-white " +
+        (small ? "px-1.5 py-px text-[10px]" : "px-2 py-0.5 text-[11px]")
+      }
+    >
+      <span aria-hidden>!</span> Urgente
+    </span>
+  );
+}
+
+/** Contador de comentários, mostrado nas listas quando há algum. */
+export function CommentCount({ n }: { n: number }) {
+  if (n <= 0) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted" title={`${n} comentário${n === 1 ? "" : "s"}`}>
+      <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+        <path d="M2 3h12v8H6l-3 3v-3H2z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      </svg>
+      {n}
+    </span>
+  );
+}
+
 export function Empty({ children }: { children: React.ReactNode }) {
   return <p className="px-4 py-8 text-center text-sm text-muted">{children}</p>;
 }
@@ -187,3 +208,5 @@ export const btn = {
 
 export const input =
   "border border-line-strong bg-bg px-2.5 py-1.5 text-sm text-ink placeholder:text-muted focus:border-red focus:outline-none disabled:opacity-40";
+
+export const checkbox = "h-4 w-4 accent-[var(--color-red)]";

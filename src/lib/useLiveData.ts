@@ -5,7 +5,7 @@ import { supabase } from "./supabase";
 
 export type Connection = "connecting" | "online" | "offline";
 
-const TABLES = ["box_models", "orders", "order_items", "order_events"] as const;
+const TABLES = ["box_models", "orders", "order_items", "order_events", "order_comments"] as const;
 const DEBOUNCE_MS = 150; // uma ação toca várias tabelas; agrupa num refetch só
 const POLL_OFFLINE_MS = 15_000; // se o Realtime cair, continua atualizando por polling
 const OFFLINE_GRACE_MS = 4_000; // só avisa "sem conexão" se a queda durar mais que isso

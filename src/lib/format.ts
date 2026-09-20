@@ -62,6 +62,28 @@ export function fmtDate(iso: string): string {
   return dateFmt.format(new Date(iso));
 }
 
+// Previsão de entrega: "hoje 14:00", "amanhã 09:30" ou "22/09 14:00".
+export function fmtEta(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  if (sameDay(d, now)) return `hoje ${time}`;
+  if (sameDay(d, tomorrow)) return `amanhã ${time}`;
+  return fmtDate(iso);
+}
+
+// Valor inicial para <input type="datetime-local">: agora + n horas, no fuso local.
+export function localDateTimeValue(hoursFromNow: number): string {
+  const d = new Date(Date.now() + hoursFromNow * 3600_000);
+  d.setSeconds(0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function timeAgo(iso: string): string {
   const diff = Math.max(0, Date.now() - new Date(iso).getTime());
   const min = Math.floor(diff / 60000);

@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { advanceOrder, cancelOrder, createOrder } from "@/lib/actions";
-import { canCancel, fmtDate, fmtOrderId, isClosed, nextAction } from "@/lib/format";
-import { fetchLenovoData } from "@/lib/queries";
+import { canCancel, fmtDate, fmtEta, fmtOrderId, isClosed, nextAction } from "@/lib/format";
+import { commentCount, fetchLenovoData } from "@/lib/queries";
 import type { BoxModel, Order } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
 import {
   btn,
+  checkbox,
+  CommentCount,
   ConnectionBanner,
   Empty,
   ErrorBox,
@@ -17,6 +19,7 @@ import {
   Stats,
   StatusBadge,
   SuccessBox,
+  UrgentBadge,
 } from "@/components/ui";
 
 type Cart = Record<string, number>; // serial → quantidade
@@ -29,7 +32,8 @@ export default function LenovoPage() {
   const [cartError, setCartError] = useState<string | null>(null);
   const [success, setSuccess] = useState<React.ReactNode>(null);
 
-  const boxes = useMemo(() => data?.boxes ?? [], [data]);
+  // Caixas descontinuadas não aparecem para pedir (o banco também recusa).
+  const boxes = useMemo(() => (data?.boxes ?? []).filter((b) => b.active), [data]);
   const orders = useMemo(() => data?.orders ?? [], [data]);
   const boxBySerial = useMemo(() => new Map(boxes.map((b) => [b.serial, b])), [boxes]);
 
@@ -354,6 +358,7 @@ function CartPanel({
 }) {
   const [requester, setRequester] = useState("");
   const [notes, setNotes] = useState("");
+  const [urgent, setUrgent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Lembra o nome de quem pediu da última vez (só neste navegador). Lido após a
@@ -381,10 +386,12 @@ function CartPanel({
       requester.trim(),
       notes,
       entries.map(([serial, quantity]) => ({ serial, quantity })),
+      urgent,
     );
     setSubmitting(false);
     if (result.ok) {
       setNotes("");
+      setUrgent(false);
       onSubmitted(result.data);
     } else {
       onError(result.error);
@@ -472,11 +479,30 @@ function CartPanel({
             placeholder="Ex.: lote da semana 38"
           />
         </label>
+        <label
+          className={
+            "flex cursor-pointer items-start gap-2.5 border px-3 py-2 text-sm transition-colors " +
+            (urgent ? "border-red bg-red-soft" : "border-line hover:border-line-strong")
+          }
+        >
+          <input
+            type="checkbox"
+            className={checkbox + " mt-0.5"}
+            checked={urgent}
+            onChange={(e) => setUrgent(e.target.checked)}
+          />
+          <span>
+            <span className="font-medium">Urgente</span>
+            <span className="block text-xs text-muted">
+              Linha parada esperando caixa. Vai pro topo da fila da DHL.
+            </span>
+          </span>
+        </label>
 
         <ErrorBox message={error} />
 
         <button className={btn.primary + " w-full"} type="submit" disabled={!canSubmit}>
-          {submitting ? "Enviando…" : "Enviar pedido à DHL"}
+          {submitting ? "Enviando…" : urgent ? "Enviar pedido urgente à DHL" : "Enviar pedido à DHL"}
         </button>
       </form>
     </Section>
@@ -519,16 +545,25 @@ function MyOrders({
             return (
               <li key={o.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
-                  <Link className="font-semibold hover:text-red" href={`/pedido/${o.id}`}>
-                    {fmtOrderId(o.id)}
-                  </Link>
+                  <span className="flex items-center gap-2">
+                    <Link className="font-semibold hover:text-red" href={`/pedido/${o.id}`}>
+                      {fmtOrderId(o.id)}
+                    </Link>
+                    {o.urgent && <UrgentBadge small />}
+                    <CommentCount n={commentCount(o)} />
+                  </span>
                   <StatusBadge status={o.status} />
                 </div>
                 <div className="mt-0.5 text-sm text-ink-2">
                   {o.requested_by} · {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} ·{" "}
                   <span className="num">{units}</span> caixas
                 </div>
-                <div className="text-xs text-muted">{fmtDate(o.created_at)}</div>
+                <div className="text-xs text-muted">
+                  {fmtDate(o.created_at)}
+                  {o.status === "em_transporte" && o.eta && (
+                    <span className="ml-2 text-ink-2">· chega {fmtEta(o.eta)}</span>
+                  )}
+                </div>
                 {(action?.actor === "lenovo" || canCancel(o.status)) && (
                   <div className="mt-2 flex gap-2">
                     {action?.actor === "lenovo" && (
@@ -580,9 +615,13 @@ function MyOrders({
                 return (
                   <tr key={o.id}>
                     <td>
-                      <Link className="font-semibold hover:text-red" href={`/pedido/${o.id}`}>
-                        {fmtOrderId(o.id)}
-                      </Link>
+                      <span className="flex items-center gap-2">
+                        <Link className="font-semibold hover:text-red" href={`/pedido/${o.id}`}>
+                          {fmtOrderId(o.id)}
+                        </Link>
+                        {o.urgent && <UrgentBadge small />}
+                        <CommentCount n={commentCount(o)} />
+                      </span>
                     </td>
                     <td className="whitespace-nowrap text-ink-2">{fmtDate(o.created_at)}</td>
                     <td>{o.requested_by}</td>
@@ -598,6 +637,9 @@ function MyOrders({
                     </td>
                     <td>
                       <StatusBadge status={o.status} />
+                      {o.status === "em_transporte" && o.eta && (
+                        <div className="text-xs text-muted">chega {fmtEta(o.eta)}</div>
+                      )}
                     </td>
                     <td>
                       <div className="flex flex-wrap items-center justify-end gap-2">

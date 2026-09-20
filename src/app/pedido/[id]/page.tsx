@@ -4,23 +4,28 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback } from "react";
 import { ACTOR_LABEL, describeEvent, fmtDate, fmtOrderId } from "@/lib/format";
-import { fetchOrder, fetchOrderEvents } from "@/lib/queries";
-import type { OrderEvent } from "@/lib/types";
+import { fetchOrder, fetchOrderComments, fetchOrderEvents } from "@/lib/queries";
+import type { OrderComment, OrderEvent } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
+import { Comments } from "@/components/Comments";
 import { Timeline } from "@/components/Timeline";
-import { ConnectionBanner, Empty, ErrorBox, Section, StatusBadge } from "@/components/ui";
+import { ConnectionBanner, Empty, ErrorBox, Section, StatusBadge, UrgentBadge } from "@/components/ui";
 
 export default function OrderPage() {
   const params = useParams<{ id: string }>();
   const id = Number.parseInt(params.id, 10);
 
   const fetcher = useCallback(async () => {
-    if (!Number.isFinite(id)) return { order: null, events: [] as OrderEvent[] };
-    const [order, events] = await Promise.all([fetchOrder(id), fetchOrderEvents(id)]);
-    return { order, events };
+    if (!Number.isFinite(id)) return { order: null, events: [] as OrderEvent[], comments: [] as OrderComment[] };
+    const [order, events, comments] = await Promise.all([
+      fetchOrder(id),
+      fetchOrderEvents(id),
+      fetchOrderComments(id),
+    ]);
+    return { order, events, comments };
   }, [id]);
 
-  const { data, error, connection } = useLiveData(fetcher);
+  const { data, error, connection, refetch } = useLiveData(fetcher);
 
   if (error) return <ErrorBox message={error} />;
   if (data === null) return <Empty>Carregando…</Empty>;
@@ -37,14 +42,17 @@ export default function OrderPage() {
     );
   }
 
-  const { order, events } = data;
+  const { order, events, comments } = data;
   const units = order.order_items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Pedido {fmtOrderId(order.id)}</h1>
+          <h1 className="flex items-center gap-3 text-xl font-semibold tracking-tight">
+            Pedido {fmtOrderId(order.id)}
+            {order.urgent && <UrgentBadge />}
+          </h1>
           <p className="text-sm text-muted">
             {order.requested_by} · criado em {fmtDate(order.created_at)}
             {order.notes && <> · {order.notes}</>}
@@ -92,6 +100,8 @@ export default function OrderPage() {
           </table>
         </Section>
       </div>
+
+      <Comments orderId={order.id} comments={comments} onChanged={refetch} />
     </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ACTOR_LABEL, fmtDate, STATUS_FLOW, STATUS_LABEL, timeAgo } from "@/lib/format";
+import { ACTOR_LABEL, fmtDate, fmtEta, STATUS_FLOW, STATUS_LABEL, timeAgo } from "@/lib/format";
 import type { Order, OrderEvent, OrderStatus } from "@/lib/types";
 
 // Frase de situação por status: onde o pedido está e quem faz a próxima etapa.
@@ -42,12 +42,19 @@ export function Timeline({ order, events }: { order: Order; events: OrderEvent[]
             <span className="ml-2 text-sm font-normal text-muted">{timeAgo(lastEvent.created_at)}</span>
           )}
         </p>
-        {situation.next && (
+        {order.status === "em_transporte" ? (
+          <p className="text-sm text-muted">
+            Previsão de entrega:{" "}
+            <span className={order.eta ? "font-semibold text-ink" : "text-ink-2"}>
+              {order.eta ? fmtEta(order.eta) : "não informada"}
+            </span>
+          </p>
+        ) : situation.next ? (
           <p className="text-sm text-muted">
             Próxima etapa: <span className="text-ink-2">{situation.next.label}</span>{" "}
             <span className="text-muted">({ACTOR_LABEL[situation.next.who]})</span>
           </p>
-        )}
+        ) : null}
       </div>
 
       {/* Desktop: horizontal */}
@@ -81,7 +88,7 @@ export function Timeline({ order, events }: { order: Order; events: OrderEvent[]
                   <span className="block font-semibold text-red">Cancelado aqui</span>
                 )}
               </div>
-              <Stamp iso={when(s)} />
+              <Stamp iso={when(s)} eta={s === "entregue" && !done && !cancelled ? order.eta : null} />
             </li>
           ))}
         </ol>
@@ -109,7 +116,7 @@ export function Timeline({ order, events }: { order: Order; events: OrderEvent[]
                   <span className="ml-2 font-semibold text-red">Cancelado aqui</span>
                 )}
               </div>
-              <Stamp iso={when(s)} />
+              <Stamp iso={when(s)} eta={s === "entregue" && !done && !cancelled ? order.eta : null} />
             </div>
           </li>
         ))}
@@ -167,7 +174,8 @@ function Node({
   );
 }
 
-function Stamp({ iso }: { iso?: string }) {
-  if (!iso) return <div className="mt-0.5 text-[11px] text-transparent tabular-nums select-none">—</div>;
-  return <div className="mt-0.5 text-[11px] text-muted tabular-nums">{fmtDate(iso)}</div>;
+function Stamp({ iso, eta }: { iso?: string; eta?: string | null }) {
+  if (iso) return <div className="mt-0.5 text-[11px] text-muted tabular-nums">{fmtDate(iso)}</div>;
+  if (eta) return <div className="mt-0.5 text-[11px] text-ink-2 tabular-nums">previsto {fmtEta(eta)}</div>;
+  return <div className="mt-0.5 text-[11px] text-transparent tabular-nums select-none">—</div>;
 }

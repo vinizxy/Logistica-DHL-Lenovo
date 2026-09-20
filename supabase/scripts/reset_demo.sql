@@ -4,12 +4,14 @@
 
 begin;
 
+delete from public.order_comments;
 delete from public.order_events;
 delete from public.order_items;
 delete from public.orders;
 
 alter table public.orders alter column id restart with 1;
 alter table public.order_events alter column id restart with 1;
+alter table public.order_comments alter column id restart with 1;
 
 update public.box_models b
    set stock_total = v.total,

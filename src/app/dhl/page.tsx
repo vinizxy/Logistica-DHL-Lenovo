@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { advanceOrder, restock } from "@/lib/actions";
-import { fmtDate, fmtOrderId, isClosed, nextAction, timeAgo } from "@/lib/format";
-import { fetchDhlData } from "@/lib/queries";
+import { fmtDate, fmtEta, fmtOrderId, isClosed, localDateTimeValue, nextAction, timeAgo } from "@/lib/format";
+import { commentCount, fetchDhlData } from "@/lib/queries";
 import type { BoxModel, Order, OrderStatus } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
 import {
   btn,
+  CommentCount,
   ConnectionBanner,
   Empty,
   ErrorBox,
@@ -16,6 +17,7 @@ import {
   Section,
   Stats,
   StatusBadge,
+  UrgentBadge,
 } from "@/components/ui";
 
 type Tab = "enviado" | "recebido" | "em_separacao" | "em_transporte" | "historico";
@@ -43,10 +45,15 @@ export default function DhlPage() {
   );
   const current = TABS.find((t) => t.key === tab)!;
   const visible = orders.filter((o) => current.match(o.status));
-  // Fila: mais antigo primeiro (quem espera há mais tempo aparece no topo). Histórico: mais recente primeiro.
-  if (tab !== "historico") visible.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  // Fila: urgentes no topo; depois quem espera há mais tempo. Histórico: mais recente primeiro.
+  if (tab !== "historico") {
+    visible.sort((a, b) =>
+      a.urgent !== b.urgent ? (a.urgent ? -1 : 1) : a.created_at.localeCompare(b.created_at),
+    );
+  }
 
   const inProgress = counts.recebido + counts.em_separacao;
+  const urgentOpen = orders.filter((o) => o.urgent && !isClosed(o.status)).length;
   const low = boxes.filter((b) => b.stock_available < b.min_stock).length;
 
   return (
@@ -60,6 +67,7 @@ export default function DhlPage() {
           <Stats
             items={[
               { value: counts.enviado, label: "novos", tone: counts.enviado ? "red" : undefined },
+              { value: urgentOpen, label: "urgentes", tone: urgentOpen ? "red" : undefined },
               { value: inProgress, label: "em andamento" },
               { value: low, label: "abaixo do mínimo", tone: low ? "amber" : undefined },
             ]}
@@ -130,46 +138,104 @@ export default function DhlPage() {
 function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Ao despachar, a DHL informa a previsão de entrega antes de confirmar.
+  const [dispatching, setDispatching] = useState(false);
+  const [eta, setEta] = useState("");
   const action = nextAction(o.status);
   const units = o.order_items.reduce((s, i) => s + i.quantity, 0);
   const isNew = o.status === "enviado";
+  const isDispatch = action?.next === "em_transporte";
 
-  async function advance() {
+  async function advance(etaIso?: string | null) {
     setBusy(true);
     setErr(null);
-    const r = await advanceOrder(o.id, "dhl");
+    const r = await advanceOrder(o.id, "dhl", etaIso);
     setBusy(false);
     if (!r.ok) setErr(r.error);
+    else setDispatching(false);
     onChanged();
   }
 
+  function startDispatch() {
+    setEta(localDateTimeValue(2));
+    setDispatching(true);
+  }
+
   return (
-    <div className={"px-4 py-3 " + (isNew ? "border-l-2 border-red" : "border-l-2 border-transparent")}>
+    <div
+      className={
+        "px-4 py-3 border-l-2 " +
+        (o.urgent ? "border-red bg-red-soft/40" : isNew ? "border-red" : "border-transparent")
+      }
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link className="text-base font-semibold hover:text-red" href={`/pedido/${o.id}`}>
               {fmtOrderId(o.id)}
             </Link>
+            {o.urgent && <UrgentBadge />}
             <StatusBadge status={o.status} />
             <span className="text-xs text-muted" title={fmtDate(o.created_at)}>
               {timeAgo(o.created_at)}
             </span>
+            <CommentCount n={commentCount(o)} />
           </div>
           <div className="mt-0.5 text-sm text-ink-2">
             {o.requested_by}
             {o.notes && <span className="text-muted"> — {o.notes}</span>}
           </div>
+          {o.status === "em_transporte" && (
+            <div className="mt-0.5 text-sm text-ink-2">
+              Previsão de entrega:{" "}
+              <span className="font-medium text-ink">{o.eta ? fmtEta(o.eta) : "não informada"}</span>
+            </div>
+          )}
         </div>
-        {action?.actor === "dhl" && (
-          <button className={btn.primary + " w-full sm:w-auto"} disabled={busy} onClick={advance} type="button">
+        {action?.actor === "dhl" && !isDispatch && (
+          <button className={btn.primary + " w-full sm:w-auto"} disabled={busy} onClick={() => advance()} type="button">
             {busy ? "Salvando…" : action.label}
+          </button>
+        )}
+        {action?.actor === "dhl" && isDispatch && !dispatching && (
+          <button className={btn.primary + " w-full sm:w-auto"} disabled={busy} onClick={startDispatch} type="button">
+            {action.label}
           </button>
         )}
         {action?.actor === "lenovo" && (
           <span className="text-xs text-muted">Aguardando a Lenovo confirmar a entrega</span>
         )}
       </div>
+
+      {dispatching && (
+        <form
+          className="mt-3 flex flex-wrap items-end gap-2 border border-line bg-surface-2 p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void advance(eta ? new Date(eta).toISOString() : null);
+          }}
+        >
+          <label className="block text-sm">
+            <span className="text-ink-2">Previsão de entrega na Lenovo</span>
+            <input
+              className={input + " mt-1 block"}
+              type="datetime-local"
+              value={eta}
+              onChange={(e) => setEta(e.target.value)}
+              required
+            />
+          </label>
+          <button className={btn.primary} type="submit" disabled={busy}>
+            {busy ? "Despachando…" : "Confirmar despacho"}
+          </button>
+          <button className={btn.secondary} type="button" disabled={busy} onClick={() => setDispatching(false)}>
+            Voltar
+          </button>
+          <span className="basis-full text-xs text-muted">
+            A Lenovo vê a previsão no painel e na linha do tempo do pedido. O estoque é baixado agora.
+          </span>
+        </form>
+      )}
 
       <table className="mt-2 max-w-xl">
         <tbody>
@@ -245,11 +311,12 @@ function StockTable({
           {boxes.map((b) => {
             const isLow = b.stock_available < b.min_stock;
             return (
-              <li key={b.serial} className="px-4 py-3">
+              <li key={b.serial} className={"px-4 py-3 " + (b.active ? "" : "opacity-60")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-medium">
                       {b.machine_name} <span className="font-normal text-ink-2">{b.machine_model}</span>
+                      {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuada</span>}
                     </div>
                     <div className="mono">{b.serial}</div>
                   </div>
@@ -310,9 +377,12 @@ function StockTable({
               {boxes.map((b) => {
                 const isLow = b.stock_available < b.min_stock;
                 return (
-                  <tr key={b.serial}>
+                  <tr key={b.serial} className={b.active ? "" : "opacity-60"}>
                     <td className="mono">{b.serial}</td>
-                    <td className="whitespace-nowrap font-medium">{b.machine_name}</td>
+                    <td className="whitespace-nowrap font-medium">
+                      {b.machine_name}
+                      {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuada</span>}
+                    </td>
                     <td className="text-ink-2">{b.machine_model}</td>
                     <td className="num text-ink-2">{b.stock_total}</td>
                     <td className="num text-muted">{b.stock_reserved}</td>

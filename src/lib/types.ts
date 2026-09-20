@@ -18,6 +18,7 @@ export interface BoxModel {
   stock_reserved: number;
   stock_available: number;
   min_stock: number;
+  active: boolean;
   updated_at: string;
 }
 
@@ -33,9 +34,21 @@ export interface Order {
   status: OrderStatus;
   requested_by: string;
   notes: string | null;
+  urgent: boolean;
+  eta: string | null; // previsão de entrega informada pela DHL ao despachar
   created_at: string;
   updated_at: string;
   order_items: OrderItem[];
+  order_comments?: { count: number }[]; // só a contagem, nas listas
+}
+
+export interface OrderComment {
+  id: number;
+  order_id: number;
+  actor: Actor;
+  author: string;
+  body: string;
+  created_at: string;
 }
 
 export interface OrderEvent {

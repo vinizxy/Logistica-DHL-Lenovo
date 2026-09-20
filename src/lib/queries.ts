@@ -1,8 +1,8 @@
 import { supabase } from "./supabase";
-import type { BoxModel, Order, OrderEvent } from "./types";
+import type { BoxModel, Order, OrderComment, OrderEvent } from "./types";
 
 const ORDER_SELECT =
-  "id, status, requested_by, notes, created_at, updated_at, order_items(order_id, serial, quantity, box_models(machine_name, machine_model))";
+  "id, status, requested_by, notes, urgent, eta, created_at, updated_at, order_items(order_id, serial, quantity, box_models(machine_name, machine_model)), order_comments(count)";
 
 export async function fetchBoxes(): Promise<BoxModel[]> {
   const { data, error } = await supabase
@@ -33,6 +33,17 @@ export async function fetchOrder(id: number): Promise<Order | null> {
   return data ? sortItems([data as unknown as Order])[0] : null;
 }
 
+export async function fetchOrderComments(orderId: number): Promise<OrderComment[]> {
+  const { data, error } = await supabase
+    .from("order_comments")
+    .select("*")
+    .eq("order_id", orderId)
+    .order("created_at")
+    .order("id");
+  if (error) throw new Error(error.message);
+  return data as OrderComment[];
+}
+
 export async function fetchOrderEvents(orderId: number): Promise<OrderEvent[]> {
   const { data, error } = await supabase
     .from("order_events")
@@ -52,6 +63,10 @@ export async function fetchLenovoData() {
 }
 
 export const fetchDhlData = fetchLenovoData;
+
+export function commentCount(o: Order): number {
+  return o.order_comments?.[0]?.count ?? 0;
+}
 
 function sortItems(orders: Order[]): Order[] {
   for (const o of orders) {
