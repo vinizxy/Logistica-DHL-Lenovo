@@ -68,7 +68,7 @@ export default function OrderPage() {
       </Section>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
-        <Section title={`Itens — ${units} caixas`} flush>
+        <Section title={`Itens — ${units} ${units === 1 ? "caixa" : "caixas"}`} flush>
           <table>
             <tbody>
               {order.order_items.map((i) => (

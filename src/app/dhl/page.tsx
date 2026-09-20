@@ -252,7 +252,7 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
           ))}
           <tr>
             <td colSpan={3} className="py-1 text-xs text-muted">
-              <span className="num">{units}</span> caixas no total
+              <span className="num">{units}</span> {units === 1 ? "caixa" : "caixas"} no total
             </td>
           </tr>
         </tbody>

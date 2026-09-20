@@ -313,10 +313,16 @@ function QtyStepper({
         value={draft ?? (value || "")}
         placeholder="0"
         onChange={(e) => {
-          setDraft(e.target.value);
-          if (e.target.value === "") return;
-          const n = Number.parseInt(e.target.value, 10);
-          if (Number.isFinite(n)) onChange(n);
+          const raw = e.target.value;
+          if (raw === "") {
+            setDraft("");
+            return;
+          }
+          const n = Number.parseInt(raw, 10);
+          if (!Number.isFinite(n)) return;
+          // Acima do disponível: o campo já mostra o limite, não o que foi digitado.
+          setDraft(n > max ? String(max) : raw);
+          onChange(n);
         }}
         onBlur={() => {
           if (draft === "") onChange(0);
@@ -452,7 +458,8 @@ function CartPanel({
                 <tr>
                   <td colSpan={3} className="pl-4 text-xs text-muted">
                     {entries.length} {entries.length === 1 ? "tipo" : "tipos"} ·{" "}
-                    <span className="num font-medium text-ink-2">{totalUnits}</span> caixas
+                    <span className="num font-medium text-ink-2">{totalUnits}</span>{" "}
+                    {totalUnits === 1 ? "caixa" : "caixas"}
                   </td>
                 </tr>
               </tbody>
@@ -556,7 +563,7 @@ function MyOrders({
                 </div>
                 <div className="mt-0.5 text-sm text-ink-2">
                   {o.requested_by} · {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} ·{" "}
-                  <span className="num">{units}</span> caixas
+                  <span className="num">{units}</span> {units === 1 ? "caixa" : "caixas"}
                 </div>
                 <div className="text-xs text-muted">
                   {fmtDate(o.created_at)}
@@ -632,7 +639,7 @@ function MyOrders({
                           .join("\n")}
                       >
                         {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} ·{" "}
-                        <span className="num">{units}</span> caixas
+                        <span className="num">{units}</span> {units === 1 ? "caixa" : "caixas"}
                       </span>
                     </td>
                     <td>
