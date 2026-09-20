@@ -5,7 +5,7 @@ notebooks devolvidos, revendidos no outlet). As caixas ficam no armazém da DHL;
 consulta o estoque e pede; a DHL separa, despacha e repõe. Os dois lados acompanham cada
 pedido em tempo real.
 
-- **Produção:** https://lenovo-dhl-refurbish.vercel.app (deploy automático a cada push na `main`)
+- **Produção:** https://lenovo-dhl-refurbish.vercel.app — deploy manual por enquanto; para deploy automático, conecte o repositório em Vercel → Settings → Git
 - **Spec:** [docs/specs/2026-09-20-lenovo-dhl-refurbish-design.md](docs/specs/2026-09-20-lenovo-dhl-refurbish-design.md)
 - **Plano:** [docs/specs/2026-09-20-plano-implementacao.md](docs/specs/2026-09-20-plano-implementacao.md)
 
