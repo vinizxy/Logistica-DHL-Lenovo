@@ -37,17 +37,27 @@ export default function LenovoPage() {
   const open = orders.filter((o) => !isClosed(o.status)).length;
   const awaiting = orders.filter((o) => o.status === "em_transporte").length;
 
-  function addToCart(box: BoxModel, qty: number) {
+  // Define a quantidade de uma caixa no pedido (absoluta), limitada ao disponível.
+  function setCartQty(box: BoxModel, qty: number) {
     setCartError(null);
-    const current = cart[box.serial] ?? 0;
-    const total = current + qty;
-    if (total > box.stock_available) {
-      setCartError(
-        `${box.machine_name} ${box.machine_model}: só ${box.stock_available} disponíveis (você já tem ${current} no pedido).`,
-      );
-      return;
+    const n = Number.isFinite(qty) ? Math.max(0, Math.floor(qty)) : 0;
+    if (n > box.stock_available) {
+      setCartError(`${box.machine_name} ${box.machine_model}: só ${box.stock_available} disponíveis.`);
     }
-    setCart({ ...cart, [box.serial]: total });
+    setQty(box.serial, Math.min(n, box.stock_available));
+  }
+
+  // Botões − / +: usa o estado anterior, então cliques rápidos nunca se perdem.
+  function stepCartQty(box: BoxModel, delta: number) {
+    setCartError(null);
+    setCart((prev) => {
+      const cur = prev[box.serial] ?? 0;
+      const n = Math.min(Math.max(0, cur + delta), box.stock_available);
+      const next = { ...prev };
+      if (n <= 0) delete next[box.serial];
+      else next[box.serial] = n;
+      return next;
+    });
   }
 
   function setQty(serial: string, qty: number) {
@@ -83,12 +93,20 @@ export default function LenovoPage() {
       <SuccessBox message={success} onClose={() => setSuccess(null)} />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <StockTable boxes={boxes} cart={cart} onAdd={addToCart} loading={data === null} />
+        <StockTable boxes={boxes} cart={cart} onSet={setCartQty} onStep={stepCartQty} loading={data === null} />
         <CartPanel
           cart={cart}
           boxBySerial={boxBySerial}
           error={cartError}
-          onQty={setQty}
+          onQty={(serial, q) => {
+            const b = boxBySerial.get(serial);
+            if (b) setCartQty(b, q);
+            else setQty(serial, q);
+          }}
+          onStep={(serial, d) => {
+            const b = boxBySerial.get(serial);
+            if (b) stepCartQty(b, d);
+          }}
           onClear={() => setCart({})}
           onSubmitted={(id) => {
             setCart({});
@@ -115,16 +133,17 @@ export default function LenovoPage() {
 function StockTable({
   boxes,
   cart,
-  onAdd,
+  onSet,
+  onStep,
   loading,
 }: {
   boxes: BoxModel[];
   cart: Cart;
-  onAdd: (box: BoxModel, qty: number) => void;
+  onSet: (box: BoxModel, qty: number) => void;
+  onStep: (box: BoxModel, delta: number) => void;
   loading: boolean;
 }) {
   const [search, setSearch] = useState("");
-  const [qty, setQty] = useState<Record<string, string>>({});
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -156,16 +175,13 @@ function StockTable({
         <Empty>Nenhuma caixa encontrada para “{search}”.</Empty>
       ) : (
         <>
-        {/* Celular: lista de cartões com o que importa à mão (disponível + pedir). */}
+        {/* Celular: lista de cartões com o que importa à mão (disponível + quantidade no pedido). */}
         <ul className="divide-y divide-line md:hidden">
           {filtered.map((b) => {
             const inCart = cart[b.serial] ?? 0;
-            const remaining = b.stock_available - inCart;
-            const disabled = remaining <= 0;
-            const value = qty[b.serial] ?? "";
-            const parsed = Number.parseInt(value, 10);
+            const soldOut = b.stock_available <= 0;
             return (
-              <li key={b.serial} className={"px-4 py-3 " + (disabled ? "opacity-50" : "")}>
+              <li key={b.serial} className={"px-4 py-3 " + (soldOut ? "opacity-50" : "")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="font-medium">
@@ -176,36 +192,21 @@ function StockTable({
                   <div className="shrink-0 text-right">
                     <div className="num text-xl font-semibold leading-none">{b.stock_available}</div>
                     <div className="text-[11px] text-muted">
-                      {b.stock_available === 0 ? <span className="text-red">esgotado</span> : "disponíveis"}
-                      {inCart > 0 && <span> · {inCart} no pedido</span>}
+                      {soldOut ? <span className="text-red">esgotado</span> : "disponíveis"}
                     </div>
                   </div>
                 </div>
-                <form
-                  className="mt-2 flex gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const n = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-                    onAdd(b, n);
-                    setQty({ ...qty, [b.serial]: "" });
-                  }}
-                >
-                  <input
-                    className={input + " w-20 num"}
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={remaining}
-                    placeholder="1"
-                    disabled={disabled}
-                    value={value}
-                    onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
-                    aria-label={`Quantidade de ${b.machine_name} ${b.machine_model}`}
+                <div className="mt-2 flex items-center gap-3">
+                  <QtyStepper
+                    value={inCart}
+                    max={b.stock_available}
+                    onChange={(n) => onSet(b, n)}
+                    onStep={(d) => onStep(b, d)}
+                    label={`${b.machine_name} ${b.machine_model}`}
+                    size="lg"
                   />
-                  <button className={btn.secondary + " flex-1"} type="submit" disabled={disabled}>
-                    Adicionar ao pedido
-                  </button>
-                </form>
+                  <span className="text-xs text-muted">{inCart > 0 ? "no pedido" : "Toque em + para pedir"}</span>
+                </div>
               </li>
             );
           })}
@@ -218,54 +219,32 @@ function StockTable({
                 <th>Máquina</th>
                 <th>Modelo</th>
                 <th className="num">Disponível</th>
-                <th className="num">No pedido</th>
-                <th>Pedir</th>
+                <th className="text-center">No pedido</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((b) => {
                 const inCart = cart[b.serial] ?? 0;
-                const remaining = b.stock_available - inCart;
-                const disabled = remaining <= 0;
-                const value = qty[b.serial] ?? "";
-                const parsed = Number.parseInt(value, 10);
+                const soldOut = b.stock_available <= 0;
                 return (
-                  <tr key={b.serial} className={disabled ? "opacity-50" : ""}>
+                  <tr key={b.serial} className={soldOut ? "opacity-50" : inCart > 0 ? "bg-red-soft/30" : ""}>
                     <td className="mono">{b.serial}</td>
                     <td className="whitespace-nowrap font-medium">{b.machine_name}</td>
                     <td className="text-ink-2">{b.machine_model}</td>
                     <td className="num text-base font-semibold">
                       {b.stock_available}
-                      {b.stock_available === 0 && (
-                        <span className="ml-1.5 text-xs font-normal text-red">esgotado</span>
-                      )}
+                      {soldOut && <span className="ml-1.5 text-xs font-normal text-red">esgotado</span>}
                     </td>
-                    <td className="num text-ink-2">{inCart || ""}</td>
                     <td>
-                      <form
-                        className="flex gap-1"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          const n = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-                          onAdd(b, n);
-                          setQty({ ...qty, [b.serial]: "" });
-                        }}
-                      >
-                        <input
-                          className={input + " w-14 num"}
-                          type="number"
-                          min={1}
-                          max={remaining}
-                          placeholder="1"
-                          disabled={disabled}
-                          value={value}
-                          onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
-                          aria-label={`Quantidade de ${b.machine_name} ${b.machine_model}`}
+                      <div className="flex justify-center">
+                        <QtyStepper
+                          value={inCart}
+                          max={b.stock_available}
+                          onChange={(n) => onSet(b, n)}
+                          onStep={(d) => onStep(b, d)}
+                          label={`${b.machine_name} ${b.machine_model}`}
                         />
-                        <button className={btn.small} type="submit" disabled={disabled}>
-                          Adicionar
-                        </button>
-                      </form>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -279,11 +258,87 @@ function StockTable({
   );
 }
 
+/**
+ * Controle − / quantidade / + ligado direto à quantidade no pedido.
+ * Digitar também funciona; zero tira a caixa do pedido; nunca passa do disponível.
+ */
+function QtyStepper({
+  value,
+  max,
+  onChange,
+  onStep,
+  label,
+  size = "md",
+}: {
+  value: number;
+  max: number;
+  onChange: (n: number) => void;
+  onStep?: (delta: number) => void;
+  label: string;
+  size?: "md" | "lg";
+}) {
+  const step = (d: number) => (onStep ? onStep(d) : onChange(value + d));
+  const [draft, setDraft] = useState<string | null>(null);
+  const h = size === "lg" ? "h-10" : "h-8";
+  const w = size === "lg" ? "w-12" : "w-9";
+  const btnCls =
+    h + " " + w +
+    " grid place-items-center border border-line-strong text-base leading-none text-ink-2 transition-colors hover:border-ink-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-30";
+  const filled = value > 0;
+
+  return (
+    <div className="inline-flex items-stretch" role="group" aria-label={`Quantidade de ${label} no pedido`}>
+      <button
+        type="button"
+        className={btnCls + " rounded-l-sm border-r-0"}
+        disabled={value <= 0}
+        onClick={() => step(-1)}
+        aria-label="Diminuir"
+      >
+        −
+      </button>
+      <input
+        className={
+          h + " w-14 border border-line-strong bg-bg text-center text-sm tabular-nums focus:border-red focus:outline-none " +
+          (filled ? "font-semibold text-ink" : "text-muted")
+        }
+        type="number"
+        inputMode="numeric"
+        min={0}
+        max={max}
+        value={draft ?? (value || "")}
+        placeholder="0"
+        onChange={(e) => {
+          setDraft(e.target.value);
+          if (e.target.value === "") return;
+          const n = Number.parseInt(e.target.value, 10);
+          if (Number.isFinite(n)) onChange(n);
+        }}
+        onBlur={() => {
+          if (draft === "") onChange(0);
+          setDraft(null);
+        }}
+        aria-label={`Quantidade de ${label}`}
+      />
+      <button
+        type="button"
+        className={btnCls + " rounded-r-sm border-l-0"}
+        disabled={value >= max}
+        onClick={() => step(1)}
+        aria-label="Aumentar"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 function CartPanel({
   cart,
   boxBySerial,
   error,
   onQty,
+  onStep,
   onClear,
   onSubmitted,
   onError,
@@ -292,6 +347,7 @@ function CartPanel({
   boxBySerial: Map<string, BoxModel>;
   error: string | null;
   onQty: (serial: string, qty: number) => void;
+  onStep: (serial: string, delta: number) => void;
   onClear: () => void;
   onSubmitted: (orderId: number) => void;
   onError: (msg: string) => void;
@@ -349,7 +405,7 @@ function CartPanel({
       <form className="space-y-4" onSubmit={submit}>
         {entries.length === 0 ? (
           <p className="text-sm text-muted">
-            Escolha as caixas na lista de estoque. Um pedido pode ter vários tipos.
+            Use o + na lista de estoque para montar o pedido. Pode ter vários tipos de caixa.
           </p>
         ) : (
           <div className="-mx-4 border-y border-line bg-bg/40">
@@ -365,15 +421,13 @@ function CartPanel({
                         </div>
                         <div className="mono text-xs">{serial}</div>
                       </td>
-                      <td className="num w-20">
-                        <input
-                          className={input + " w-16 num"}
-                          type="number"
-                          min={0}
-                          max={b?.stock_available}
+                      <td className="w-32">
+                        <QtyStepper
                           value={q}
-                          onChange={(e) => onQty(serial, Number.parseInt(e.target.value || "0", 10))}
-                          aria-label={`Quantidade de ${serial}`}
+                          max={b?.stock_available ?? q}
+                          onChange={(n) => onQty(serial, n)}
+                          onStep={(d) => onStep(serial, d)}
+                          label={b ? `${b.machine_name} ${b.machine_model}` : serial}
                         />
                       </td>
                       <td className="w-8 pr-4 text-right">
