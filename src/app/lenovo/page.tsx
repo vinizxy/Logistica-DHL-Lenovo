@@ -82,7 +82,7 @@ export default function LenovoPage() {
       <ErrorBox message={error} />
       <SuccessBox message={success} onClose={() => setSuccess(null)} />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <StockTable boxes={boxes} cart={cart} onAdd={addToCart} loading={data === null} />
         <CartPanel
           cart={cart}
@@ -155,7 +155,62 @@ function StockTable({
       ) : filtered.length === 0 ? (
         <Empty>Nenhuma caixa encontrada para “{search}”.</Empty>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Celular: lista de cartões com o que importa à mão (disponível + pedir). */}
+        <ul className="divide-y divide-line md:hidden">
+          {filtered.map((b) => {
+            const inCart = cart[b.serial] ?? 0;
+            const remaining = b.stock_available - inCart;
+            const disabled = remaining <= 0;
+            const value = qty[b.serial] ?? "";
+            const parsed = Number.parseInt(value, 10);
+            return (
+              <li key={b.serial} className={"px-4 py-3 " + (disabled ? "opacity-50" : "")}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium">
+                      {b.machine_name} <span className="font-normal text-ink-2">{b.machine_model}</span>
+                    </div>
+                    <div className="mono">{b.serial}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="num text-xl font-semibold leading-none">{b.stock_available}</div>
+                    <div className="text-[11px] text-muted">
+                      {b.stock_available === 0 ? <span className="text-red">esgotado</span> : "disponíveis"}
+                      {inCart > 0 && <span> · {inCart} no pedido</span>}
+                    </div>
+                  </div>
+                </div>
+                <form
+                  className="mt-2 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const n = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+                    onAdd(b, n);
+                    setQty({ ...qty, [b.serial]: "" });
+                  }}
+                >
+                  <input
+                    className={input + " w-20 num"}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={remaining}
+                    placeholder="1"
+                    disabled={disabled}
+                    value={value}
+                    onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
+                    aria-label={`Quantidade de ${b.machine_name} ${b.machine_model}`}
+                  />
+                  <button className={btn.secondary + " flex-1"} type="submit" disabled={disabled}>
+                    Adicionar ao pedido
+                  </button>
+                </form>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto md:block">
           <table>
             <thead>
               <tr>
@@ -218,6 +273,7 @@ function StockTable({
             </tbody>
           </table>
         </div>
+        </>
       )}
     </Section>
   );
@@ -293,7 +349,7 @@ function CartPanel({
       <form className="space-y-4" onSubmit={submit}>
         {entries.length === 0 ? (
           <p className="text-sm text-muted">
-            Escolha as caixas na tabela ao lado. Um pedido pode ter vários tipos.
+            Escolha as caixas na lista de estoque. Um pedido pode ter vários tipos.
           </p>
         ) : (
           <div className="-mx-4 border-y border-line bg-bg/40">
@@ -401,7 +457,57 @@ function MyOrders({
       ) : orders.length === 0 ? (
         <Empty>Nenhum pedido ainda. O primeiro que você enviar aparece aqui.</Empty>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <ul className="divide-y divide-line md:hidden">
+          {orders.map((o) => {
+            const action = nextAction(o.status);
+            const units = o.order_items.reduce((s, i) => s + i.quantity, 0);
+            return (
+              <li key={o.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Link className="font-semibold hover:text-red" href={`/pedido/${o.id}`}>
+                    {fmtOrderId(o.id)}
+                  </Link>
+                  <StatusBadge status={o.status} />
+                </div>
+                <div className="mt-0.5 text-sm text-ink-2">
+                  {o.requested_by} · {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} ·{" "}
+                  <span className="num">{units}</span> caixas
+                </div>
+                <div className="text-xs text-muted">{fmtDate(o.created_at)}</div>
+                {(action?.actor === "lenovo" || canCancel(o.status)) && (
+                  <div className="mt-2 flex gap-2">
+                    {action?.actor === "lenovo" && (
+                      <button
+                        className={btn.primary + " flex-1"}
+                        disabled={busy === o.id}
+                        onClick={() => run(o.id, () => advanceOrder(o.id, "lenovo"))}
+                      >
+                        {action.label}
+                      </button>
+                    )}
+                    {canCancel(o.status) && (
+                      <button
+                        className={btn.smallDanger + " px-3 py-1.5 text-sm"}
+                        disabled={busy === o.id}
+                        onClick={() => {
+                          if (confirm(`Cancelar o pedido ${fmtOrderId(o.id)}?`))
+                            void run(o.id, () => cancelOrder(o.id));
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                )}
+                {rowError?.id === o.id && (
+                  <div className="mt-1 text-xs text-red">{rowError.msg}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto md:block">
           <table>
             <thead>
               <tr>
@@ -473,6 +579,7 @@ function MyOrders({
             </tbody>
           </table>
         </div>
+        </>
       )}
     </Section>
   );

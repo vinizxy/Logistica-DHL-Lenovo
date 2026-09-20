@@ -162,7 +162,7 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
           </div>
         </div>
         {action?.actor === "dhl" && (
-          <button className={btn.primary} disabled={busy} onClick={advance} type="button">
+          <button className={btn.primary + " w-full sm:w-auto"} disabled={busy} onClick={advance} type="button">
             {busy ? "Salvando…" : action.label}
           </button>
         )}
@@ -239,7 +239,60 @@ function StockTable({
       {loading ? (
         <Empty>Carregando…</Empty>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Celular: lista com os quatro números e a reposição à mão. */}
+        <ul className="divide-y divide-line md:hidden">
+          {boxes.map((b) => {
+            const isLow = b.stock_available < b.min_stock;
+            return (
+              <li key={b.serial} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium">
+                      {b.machine_name} <span className="font-normal text-ink-2">{b.machine_model}</span>
+                    </div>
+                    <div className="mono">{b.serial}</div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className={"num text-xl font-semibold leading-none " + (isLow ? "text-amber" : "")}>
+                      {b.stock_available}
+                    </div>
+                    <div className="text-[11px] text-muted">
+                      {isLow ? <span className="text-amber">abaixo do mínimo</span> : "disponíveis"}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-1.5 flex gap-4 text-xs text-muted">
+                  <span>total <span className="num text-ink-2">{b.stock_total}</span></span>
+                  <span>reservado <span className="num text-ink-2">{b.stock_reserved}</span></span>
+                  <span>mínimo <span className="num text-ink-2">{b.min_stock}</span></span>
+                </div>
+                <form
+                  className="mt-2 flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void doRestock(b.serial);
+                  }}
+                >
+                  <input
+                    className={input + " w-20 num"}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    placeholder="0"
+                    value={qty[b.serial] ?? ""}
+                    onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
+                    aria-label={`Repor ${b.machine_name} ${b.machine_model}`}
+                  />
+                  <button className={btn.secondary + " flex-1"} type="submit" disabled={busy === b.serial}>
+                    Registrar reposição
+                  </button>
+                </form>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto md:block">
           <table>
             <thead>
               <tr>
@@ -300,6 +353,7 @@ function StockTable({
             </tbody>
           </table>
         </div>
+        </>
       )}
     </Section>
   );

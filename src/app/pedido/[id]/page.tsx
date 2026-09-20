@@ -65,7 +65,7 @@ export default function OrderPage() {
         <Timeline order={order} events={events} />
       </Section>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
         <Section title={`Itens — ${units} caixas`} flush>
           <table>
             <tbody>
@@ -113,7 +113,39 @@ function Timeline({ order, events }: { order: Order; events: OrderEvent[] }) {
   const when = (s: string) => events.find((e) => e.to_status === s)?.created_at;
 
   return (
-    <ol className="flex items-start">
+    <>
+    {/* Celular: vertical. */}
+    <ol className="space-y-0 sm:hidden">
+      {STATUS_FLOW.map((s, idx) => {
+        const reached = idx <= reachedIdx;
+        const isCurrent = idx === reachedIdx;
+        const ts = when(s);
+        const last = idx === STATUS_FLOW.length - 1;
+        const dot = cancelled && isCurrent
+          ? "border-muted bg-muted"
+          : isCurrent && !done
+            ? "border-red bg-red shadow-[0_0_0_4px_var(--color-red-soft)]"
+            : reached
+              ? "border-red bg-red"
+              : "border-line-strong bg-surface";
+        const line = idx < reachedIdx ? "bg-red" : "bg-line-strong";
+        return (
+          <li key={s} className="relative flex gap-3 pb-5 last:pb-0">
+            {!last && <div className={"absolute top-4 bottom-0 left-[7px] w-0.5 " + line} />}
+            <div className={"relative mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 " + dot} />
+            <div className="min-w-0">
+              <div className={"text-sm " + (isCurrent ? "font-semibold text-ink" : reached ? "text-ink-2" : "text-muted")}>
+                {STATUS_LABEL[s]}
+                {cancelled && isCurrent && <span className="ml-2 font-semibold text-red">Cancelado aqui</span>}
+              </div>
+              {ts && <div className="num text-xs text-muted">{fmtDate(ts)}</div>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+    {/* Desktop: horizontal. */}
+    <ol className="hidden items-start sm:flex">
       {STATUS_FLOW.map((s, idx) => {
         const reached = idx <= reachedIdx;
         const isCurrent = idx === reachedIdx;
@@ -148,5 +180,6 @@ function Timeline({ order, events }: { order: Order; events: OrderEvent[] }) {
         );
       })}
     </ol>
+    </>
   );
 }
