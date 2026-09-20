@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Connection } from "@/lib/useLiveData";
-import { STATUS_CLASS, STATUS_LABEL } from "@/lib/format";
+import { STATUS_LABEL } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 
 export function Nav() {
@@ -14,38 +14,48 @@ export function Nav() {
       <Link
         href={href}
         className={
-          "rounded px-3 py-1.5 text-sm font-medium " +
-          (active ? "bg-gray-900 text-white" : "text-gray-700 hover:bg-gray-200")
+          "relative px-3 py-3 text-sm font-medium transition-colors " +
+          (active ? "text-ink" : "text-muted hover:text-ink-2")
         }
       >
+        <span className="hidden sm:inline">Painel </span>
         {label}
+        {active && <span className="absolute inset-x-3 -bottom-px h-0.5 bg-red" />}
       </Link>
     );
   };
   return (
-    <header className="border-b bg-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <div>
-          <div className="text-base font-semibold">Caixas Refurbish</div>
-          <div className="text-xs text-gray-500">Lenovo × DHL — pedidos e estoque</div>
-        </div>
-        <nav className="flex gap-2">
-          {link("/lenovo", "Painel Lenovo")}
-          {link("/dhl", "Painel DHL")}
+    <header className="border-b border-line bg-surface">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4">
+        <Link href="/lenovo" className="flex items-center gap-2.5 py-3">
+          <span aria-hidden className="grid h-6 w-6 place-items-center bg-red">
+            <span className="h-2.5 w-2.5 border border-white/80" />
+          </span>
+          <span className="text-[15px] font-semibold tracking-tight">Caixas Refurbish</span>
+          <span className="hidden text-sm text-muted sm:inline">Lenovo × DHL</span>
+        </Link>
+        <nav className="flex">
+          {link("/lenovo", "Lenovo")}
+          {link("/dhl", "DHL")}
         </nav>
       </div>
     </header>
   );
 }
 
+const STATUS_DOT: Record<OrderStatus, string> = {
+  enviado: "bg-red",
+  recebido: "bg-sky",
+  em_separacao: "bg-amber",
+  em_transporte: "bg-violet",
+  entregue: "bg-green",
+  cancelado: "bg-muted",
+};
+
 export function StatusBadge({ status }: { status: OrderStatus }) {
   return (
-    <span
-      className={
-        "inline-block rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap " +
-        STATUS_CLASS[status]
-      }
-    >
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium text-ink-2">
+      <span className={"h-1.5 w-1.5 rounded-full " + STATUS_DOT[status]} />
       {STATUS_LABEL[status]}
     </span>
   );
@@ -57,8 +67,8 @@ export function ConnectionBanner({ connection }: { connection: Connection }) {
   return (
     <div
       className={
-        "rounded px-3 py-2 text-sm " +
-        (offline ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-600")
+        "border px-3 py-2 text-sm " +
+        (offline ? "border-red/40 bg-red-soft text-ink" : "border-line bg-surface text-muted")
       }
     >
       {offline
@@ -77,10 +87,10 @@ export function ErrorBox({
 }) {
   if (!message) return null;
   return (
-    <div className="flex items-start justify-between gap-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
+    <div className="flex items-start justify-between gap-3 border-l-2 border-red bg-red-soft px-3 py-2 text-sm text-ink">
       <span>{message}</span>
       {onClose && (
-        <button onClick={onClose} className="text-red-800 hover:underline" type="button">
+        <button onClick={onClose} className="text-ink-2 hover:text-ink" type="button">
           fechar
         </button>
       )}
@@ -97,10 +107,10 @@ export function SuccessBox({
 }) {
   if (!message) return null;
   return (
-    <div className="flex items-start justify-between gap-3 rounded border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800">
+    <div className="flex items-start justify-between gap-3 border-l-2 border-green bg-green-soft px-3 py-2 text-sm text-ink">
       <span>{message}</span>
       {onClose && (
-        <button onClick={onClose} className="text-green-800 hover:underline" type="button">
+        <button onClick={onClose} className="text-ink-2 hover:text-ink" type="button">
           fechar
         </button>
       )}
@@ -112,32 +122,59 @@ export function Section({
   title,
   right,
   children,
+  flush,
 }: {
   title: string;
   right?: React.ReactNode;
   children: React.ReactNode;
+  flush?: boolean;
 }) {
   return (
-    <section className="rounded border bg-white">
-      <div className="flex items-center justify-between border-b px-4 py-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{title}</h2>
+    <section className="border border-line bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+        <h2 className="text-sm font-semibold">{title}</h2>
         {right}
       </div>
-      <div className="p-4">{children}</div>
+      <div className={flush ? "" : "p-4"}>{children}</div>
     </section>
   );
 }
 
+/** Faixa de resumo: números tabulares com rótulo ao lado, sem virar "hero". */
+export function Stats({ items }: { items: { value: React.ReactNode; label: string; tone?: "red" | "amber" }[] }) {
+  return (
+    <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">
+      {items.map((s) => (
+        <span key={s.label} className="flex items-baseline gap-1.5">
+          <span
+            className={
+              "num text-lg font-semibold " +
+              (s.tone === "red" ? "text-red" : s.tone === "amber" ? "text-amber" : "text-ink")
+            }
+          >
+            {s.value}
+          </span>
+          {s.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="px-4 py-8 text-center text-sm text-muted">{children}</p>;
+}
+
 export const btn = {
   primary:
-    "rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40",
+    "bg-red px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-hover disabled:cursor-not-allowed disabled:bg-surface-3 disabled:text-muted",
   secondary:
-    "rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
-  danger:
-    "rounded border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40",
+    "border border-line-strong bg-transparent px-3 py-1.5 text-sm font-medium text-ink-2 transition-colors hover:border-ink-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40",
   small:
-    "rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
+    "border border-line-strong bg-transparent px-2.5 py-1 text-xs font-medium text-ink-2 transition-colors hover:border-ink-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40",
+  smallDanger:
+    "border border-red/50 bg-transparent px-2.5 py-1 text-xs font-medium text-red transition-colors hover:bg-red-soft disabled:cursor-not-allowed disabled:opacity-40",
 };
 
 export const input =
-  "rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-100";
+  "border border-line-strong bg-bg px-2.5 py-1.5 text-sm text-ink placeholder:text-muted focus:border-red focus:outline-none disabled:opacity-40";

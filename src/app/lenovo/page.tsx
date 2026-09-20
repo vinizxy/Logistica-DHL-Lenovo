@@ -3,16 +3,18 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { advanceOrder, cancelOrder, createOrder } from "@/lib/actions";
-import { canCancel, fmtDate, fmtOrderId, nextAction } from "@/lib/format";
+import { canCancel, fmtDate, fmtOrderId, isClosed, nextAction } from "@/lib/format";
 import { fetchLenovoData } from "@/lib/queries";
 import type { BoxModel, Order } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
 import {
   btn,
   ConnectionBanner,
+  Empty,
   ErrorBox,
   input,
   Section,
+  Stats,
   StatusBadge,
   SuccessBox,
 } from "@/components/ui";
@@ -28,7 +30,12 @@ export default function LenovoPage() {
   const [success, setSuccess] = useState<React.ReactNode>(null);
 
   const boxes = useMemo(() => data?.boxes ?? [], [data]);
+  const orders = useMemo(() => data?.orders ?? [], [data]);
   const boxBySerial = useMemo(() => new Map(boxes.map((b) => [b.serial, b])), [boxes]);
+
+  const available = boxes.reduce((s, b) => s + b.stock_available, 0);
+  const open = orders.filter((o) => !isClosed(o.status)).length;
+  const awaiting = orders.filter((o) => o.status === "em_transporte").length;
 
   function addToCart(box: BoxModel, qty: number) {
     setCartError(null);
@@ -55,11 +62,27 @@ export default function LenovoPage() {
 
   return (
     <>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Painel Lenovo</h1>
+          <p className="text-sm text-muted">Linha de refurbish — pedir caixas ao armazém da DHL</p>
+        </div>
+        {data && (
+          <Stats
+            items={[
+              { value: available.toLocaleString("pt-BR"), label: "caixas disponíveis" },
+              { value: open, label: "pedidos em andamento" },
+              { value: awaiting, label: "aguardando sua confirmação", tone: awaiting ? "red" : undefined },
+            ]}
+          />
+        )}
+      </div>
+
       <ConnectionBanner connection={connection} />
       <ErrorBox message={error} />
       <SuccessBox message={success} onClose={() => setSuccess(null)} />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <StockTable boxes={boxes} cart={cart} onAdd={addToCart} loading={data === null} />
         <CartPanel
           cart={cart}
@@ -84,7 +107,7 @@ export default function LenovoPage() {
         />
       </div>
 
-      <MyOrders orders={data?.orders ?? []} loading={data === null} onChanged={refetch} />
+      <MyOrders orders={orders} loading={data === null} onChanged={refetch} />
     </>
   );
 }
@@ -116,20 +139,21 @@ function StockTable({
 
   return (
     <Section
-      title="Estoque de caixas (DHL)"
+      title="Estoque de caixas na DHL"
+      flush
       right={
         <input
           className={input + " w-56"}
-          placeholder="Buscar serial ou máquina…"
+          placeholder="Buscar serial ou máquina"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       }
     >
       {loading ? (
-        <p className="text-sm text-gray-500">Carregando…</p>
+        <Empty>Carregando…</Empty>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-500">Nenhuma caixa encontrada.</p>
+        <Empty>Nenhuma caixa encontrada para “{search}”.</Empty>
       ) : (
         <div className="overflow-x-auto">
           <table>
@@ -151,17 +175,17 @@ function StockTable({
                 const value = qty[b.serial] ?? "";
                 const parsed = Number.parseInt(value, 10);
                 return (
-                  <tr key={b.serial} className={disabled ? "text-gray-400" : ""}>
+                  <tr key={b.serial} className={disabled ? "opacity-50" : ""}>
                     <td className="mono">{b.serial}</td>
-                    <td>{b.machine_name}</td>
-                    <td>{b.machine_model}</td>
-                    <td className="num">
+                    <td className="whitespace-nowrap font-medium">{b.machine_name}</td>
+                    <td className="text-ink-2">{b.machine_model}</td>
+                    <td className="num text-base font-semibold">
                       {b.stock_available}
                       {b.stock_available === 0 && (
-                        <span className="ml-1 text-xs text-red-600">esgotado</span>
+                        <span className="ml-1.5 text-xs font-normal text-red">esgotado</span>
                       )}
                     </td>
-                    <td className="num">{inCart || ""}</td>
+                    <td className="num text-ink-2">{inCart || ""}</td>
                     <td>
                       <form
                         className="flex gap-1"
@@ -173,7 +197,7 @@ function StockTable({
                         }}
                       >
                         <input
-                          className={input + " w-16 num"}
+                          className={input + " w-14 num"}
                           type="number"
                           min={1}
                           max={remaining}
@@ -181,9 +205,10 @@ function StockTable({
                           disabled={disabled}
                           value={value}
                           onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
+                          aria-label={`Quantidade de ${b.machine_name} ${b.machine_model}`}
                         />
                         <button className={btn.small} type="submit" disabled={disabled}>
-                          + adicionar
+                          Adicionar
                         </button>
                       </form>
                     </td>
@@ -259,64 +284,67 @@ function CartPanel({
       title="Novo pedido"
       right={
         entries.length > 0 ? (
-          <button className="text-xs text-gray-500 hover:underline" onClick={onClear} type="button">
-            limpar
+          <button className="text-xs text-muted hover:text-ink" onClick={onClear} type="button">
+            Limpar
           </button>
         ) : undefined
       }
     >
-      <form className="space-y-3" onSubmit={submit}>
+      <form className="space-y-4" onSubmit={submit}>
         {entries.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            Adicione caixas pela tabela ao lado. Um pedido pode ter vários tipos de caixa.
+          <p className="text-sm text-muted">
+            Escolha as caixas na tabela ao lado. Um pedido pode ter vários tipos.
           </p>
         ) : (
-          <table>
-            <tbody>
-              {entries.map(([serial, q]) => {
-                const b = boxBySerial.get(serial);
-                return (
-                  <tr key={serial}>
-                    <td>
-                      <div className="font-medium">
-                        {b ? `${b.machine_name} ${b.machine_model}` : serial}
-                      </div>
-                      <div className="mono text-xs text-gray-500">{serial}</div>
-                    </td>
-                    <td className="num w-20">
-                      <input
-                        className={input + " w-16 num"}
-                        type="number"
-                        min={0}
-                        max={b?.stock_available}
-                        value={q}
-                        onChange={(e) => onQty(serial, Number.parseInt(e.target.value || "0", 10))}
-                      />
-                    </td>
-                    <td className="w-8 text-right">
-                      <button
-                        type="button"
-                        className="text-xs text-red-600 hover:underline"
-                        onClick={() => onQty(serial, 0)}
-                      >
-                        remover
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr>
-                <td className="text-xs text-gray-500">
-                  {entries.length} {entries.length === 1 ? "tipo" : "tipos"} · {totalUnits} caixas
-                </td>
-                <td colSpan={2} />
-              </tr>
-            </tbody>
-          </table>
+          <div className="-mx-4 border-y border-line bg-bg/40">
+            <table>
+              <tbody>
+                {entries.map(([serial, q]) => {
+                  const b = boxBySerial.get(serial);
+                  return (
+                    <tr key={serial}>
+                      <td className="pl-4">
+                        <div className="font-medium">
+                          {b ? `${b.machine_name} ${b.machine_model}` : serial}
+                        </div>
+                        <div className="mono text-xs">{serial}</div>
+                      </td>
+                      <td className="num w-20">
+                        <input
+                          className={input + " w-16 num"}
+                          type="number"
+                          min={0}
+                          max={b?.stock_available}
+                          value={q}
+                          onChange={(e) => onQty(serial, Number.parseInt(e.target.value || "0", 10))}
+                          aria-label={`Quantidade de ${serial}`}
+                        />
+                      </td>
+                      <td className="w-8 pr-4 text-right">
+                        <button
+                          type="button"
+                          className="text-xs text-muted hover:text-red"
+                          onClick={() => onQty(serial, 0)}
+                        >
+                          Remover
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr>
+                  <td colSpan={3} className="pl-4 text-xs text-muted">
+                    {entries.length} {entries.length === 1 ? "tipo" : "tipos"} ·{" "}
+                    <span className="num font-medium text-ink-2">{totalUnits}</span> caixas
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         )}
 
         <label className="block text-sm">
-          <span className="text-gray-600">Solicitante *</span>
+          <span className="text-ink-2">Solicitante</span>
           <input
             className={input + " mt-1 w-full"}
             value={requester}
@@ -326,12 +354,12 @@ function CartPanel({
           />
         </label>
         <label className="block text-sm">
-          <span className="text-gray-600">Observação</span>
+          <span className="text-ink-2">Observação (opcional)</span>
           <input
             className={input + " mt-1 w-full"}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Opcional — ex.: lote da semana 38"
+            placeholder="Ex.: lote da semana 38"
           />
         </label>
 
@@ -367,11 +395,11 @@ function MyOrders({
   }
 
   return (
-    <Section title="Pedidos">
+    <Section title="Pedidos" flush>
       {loading ? (
-        <p className="text-sm text-gray-500">Carregando…</p>
+        <Empty>Carregando…</Empty>
       ) : orders.length === 0 ? (
-        <p className="text-sm text-gray-500">Nenhum pedido ainda.</p>
+        <Empty>Nenhum pedido ainda. O primeiro que você enviar aparece aqui.</Empty>
       ) : (
         <div className="overflow-x-auto">
           <table>
@@ -392,17 +420,20 @@ function MyOrders({
                 return (
                   <tr key={o.id}>
                     <td>
-                      <Link className="font-medium underline" href={`/pedido/${o.id}`}>
+                      <Link className="font-semibold hover:text-red" href={`/pedido/${o.id}`}>
                         {fmtOrderId(o.id)}
                       </Link>
                     </td>
-                    <td className="whitespace-nowrap">{fmtDate(o.created_at)}</td>
+                    <td className="whitespace-nowrap text-ink-2">{fmtDate(o.created_at)}</td>
                     <td>{o.requested_by}</td>
-                    <td>
-                      <span title={o.order_items
-                        .map((i) => `${i.quantity} × ${i.box_models?.machine_name ?? i.serial}`)
-                        .join("\n")}>
-                        {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} · {units} caixas
+                    <td className="text-ink-2">
+                      <span
+                        title={o.order_items
+                          .map((i) => `${i.quantity} × ${i.box_models?.machine_name ?? i.serial}`)
+                          .join("\n")}
+                      >
+                        {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} ·{" "}
+                        <span className="num">{units}</span> caixas
                       </span>
                     </td>
                     <td>
@@ -412,7 +443,7 @@ function MyOrders({
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {action?.actor === "lenovo" && (
                           <button
-                            className={btn.small}
+                            className={btn.primary + " px-2.5 py-1 text-xs"}
                             disabled={busy === o.id}
                             onClick={() => run(o.id, () => advanceOrder(o.id, "lenovo"))}
                           >
@@ -421,7 +452,7 @@ function MyOrders({
                         )}
                         {canCancel(o.status) && (
                           <button
-                            className={btn.small + " text-red-700"}
+                            className={btn.smallDanger}
                             disabled={busy === o.id}
                             onClick={() => {
                               if (confirm(`Cancelar o pedido ${fmtOrderId(o.id)}?`))
@@ -433,7 +464,7 @@ function MyOrders({
                         )}
                       </div>
                       {rowError?.id === o.id && (
-                        <div className="mt-1 text-right text-xs text-red-700">{rowError.msg}</div>
+                        <div className="mt-1 text-right text-xs text-red">{rowError.msg}</div>
                       )}
                     </td>
                   </tr>

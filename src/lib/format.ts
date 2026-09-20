@@ -18,15 +18,6 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   cancelado: "Cancelado",
 };
 
-export const STATUS_CLASS: Record<OrderStatus, string> = {
-  enviado: "bg-blue-100 text-blue-800",
-  recebido: "bg-sky-100 text-sky-800",
-  em_separacao: "bg-amber-100 text-amber-800",
-  em_transporte: "bg-violet-100 text-violet-800",
-  entregue: "bg-green-100 text-green-800",
-  cancelado: "bg-red-100 text-red-800",
-};
-
 export const ACTOR_LABEL: Record<Actor, string> = { lenovo: "Lenovo", dhl: "DHL" };
 
 // Espelha a regra de advance_order no banco: qual é a única próxima ação e de quem é.

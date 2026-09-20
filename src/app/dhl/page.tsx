@@ -7,7 +7,16 @@ import { fmtDate, fmtOrderId, isClosed, nextAction, timeAgo } from "@/lib/format
 import { fetchDhlData } from "@/lib/queries";
 import type { BoxModel, Order, OrderStatus } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
-import { btn, ConnectionBanner, ErrorBox, input, Section, StatusBadge } from "@/components/ui";
+import {
+  btn,
+  ConnectionBanner,
+  Empty,
+  ErrorBox,
+  input,
+  Section,
+  Stats,
+  StatusBadge,
+} from "@/components/ui";
 
 type Tab = "enviado" | "recebido" | "em_separacao" | "em_transporte" | "historico";
 
@@ -24,6 +33,7 @@ export default function DhlPage() {
   const [tab, setTab] = useState<Tab>("enviado");
 
   const orders = useMemo(() => data?.orders ?? [], [data]);
+  const boxes = useMemo(() => data?.boxes ?? [], [data]);
   const counts = useMemo(
     () =>
       Object.fromEntries(
@@ -36,49 +46,75 @@ export default function DhlPage() {
   // Fila: mais antigo primeiro (quem espera há mais tempo aparece no topo). Histórico: mais recente primeiro.
   if (tab !== "historico") visible.sort((a, b) => a.created_at.localeCompare(b.created_at));
 
+  const inProgress = counts.recebido + counts.em_separacao;
+  const low = boxes.filter((b) => b.stock_available < b.min_stock).length;
+
   return (
     <>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Painel DHL</h1>
+          <p className="text-sm text-muted">Armazém — separar, despachar e repor caixas</p>
+        </div>
+        {data && (
+          <Stats
+            items={[
+              { value: counts.enviado, label: "novos", tone: counts.enviado ? "red" : undefined },
+              { value: inProgress, label: "em andamento" },
+              { value: low, label: "abaixo do mínimo", tone: low ? "amber" : undefined },
+            ]}
+          />
+        )}
+      </div>
+
       <ConnectionBanner connection={connection} />
       <ErrorBox message={error} />
 
       <Section
         title="Fila de pedidos"
+        flush
         right={
-          <div className="flex flex-wrap gap-1">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
-                className={
-                  "rounded px-2.5 py-1 text-xs font-medium " +
-                  (tab === t.key ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200")
-                }
-              >
-                {t.label}
-                {counts[t.key] > 0 && (
-                  <span
-                    className={
-                      "ml-1.5 rounded-full px-1.5 " +
-                      (tab === t.key ? "bg-white text-gray-900" : "bg-gray-300 text-gray-800")
-                    }
-                  >
-                    {counts[t.key]}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="-mb-2.5 flex flex-wrap gap-1">
+            {TABS.map((t) => {
+              const active = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={
+                    "relative px-2.5 pb-2.5 pt-1 text-xs font-medium transition-colors " +
+                    (active ? "text-ink" : "text-muted hover:text-ink-2")
+                  }
+                >
+                  {t.label}
+                  {counts[t.key] > 0 && (
+                    <span
+                      className={
+                        "num ml-1.5 inline-block min-w-[1.25rem] px-1 text-center " +
+                        (t.key === "enviado" ? "bg-red text-white" : "bg-surface-3 text-ink-2")
+                      }
+                    >
+                      {counts[t.key]}
+                    </span>
+                  )}
+                  {active && <span className="absolute inset-x-2 bottom-0 h-0.5 bg-red" />}
+                </button>
+              );
+            })}
           </div>
         }
       >
         {data === null ? (
-          <p className="text-sm text-gray-500">Carregando…</p>
+          <Empty>Carregando…</Empty>
         ) : visible.length === 0 ? (
-          <p className="text-sm text-gray-500">
-            {tab === "enviado" ? "Nenhum pedido novo." : "Nenhum pedido nesta etapa."}
-          </p>
+          <Empty>
+            {tab === "enviado"
+              ? "Nenhum pedido novo. Pedidos enviados pela Lenovo aparecem aqui na hora."
+              : "Nenhum pedido nesta etapa."}
+          </Empty>
         ) : (
-          <div className="space-y-3">
+          <div className="divide-y divide-line">
             {visible.map((o) => (
               <OrderCard key={o.id} order={o} onChanged={refetch} />
             ))}
@@ -86,7 +122,7 @@ export default function DhlPage() {
         )}
       </Section>
 
-      <StockTable boxes={data?.boxes ?? []} loading={data === null} onChanged={refetch} />
+      <StockTable boxes={boxes} loading={data === null} onChanged={refetch} />
     </>
   );
 }
@@ -96,6 +132,7 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
   const [err, setErr] = useState<string | null>(null);
   const action = nextAction(o.status);
   const units = o.order_items.reduce((s, i) => s + i.quantity, 0);
+  const isNew = o.status === "enviado";
 
   async function advance() {
     setBusy(true);
@@ -107,21 +144,21 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
   }
 
   return (
-    <div className="rounded border border-gray-200 p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
+    <div className={"px-4 py-3 " + (isNew ? "border-l-2 border-red" : "border-l-2 border-transparent")}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <Link className="font-semibold underline" href={`/pedido/${o.id}`}>
+          <div className="flex items-center gap-3">
+            <Link className="text-base font-semibold hover:text-red" href={`/pedido/${o.id}`}>
               {fmtOrderId(o.id)}
             </Link>
             <StatusBadge status={o.status} />
-            <span className="text-xs text-gray-500" title={fmtDate(o.created_at)}>
+            <span className="text-xs text-muted" title={fmtDate(o.created_at)}>
               {timeAgo(o.created_at)}
             </span>
           </div>
-          <div className="mt-0.5 text-sm text-gray-700">
-            Solicitante: <span className="font-medium">{o.requested_by}</span>
-            {o.notes && <span className="text-gray-500"> · {o.notes}</span>}
+          <div className="mt-0.5 text-sm text-ink-2">
+            {o.requested_by}
+            {o.notes && <span className="text-muted"> — {o.notes}</span>}
           </div>
         </div>
         {action?.actor === "dhl" && (
@@ -130,17 +167,17 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
           </button>
         )}
         {action?.actor === "lenovo" && (
-          <span className="text-xs text-gray-500">Aguardando a Lenovo confirmar a entrega</span>
+          <span className="text-xs text-muted">Aguardando a Lenovo confirmar a entrega</span>
         )}
       </div>
 
-      <table className="mt-2">
+      <table className="mt-2 max-w-xl">
         <tbody>
           {o.order_items.map((i) => (
             <tr key={i.serial}>
-              <td className="num w-14 font-semibold">{i.quantity} ×</td>
-              <td className="mono w-32">{i.serial}</td>
-              <td>
+              <td className="num w-14 py-1 font-semibold">{i.quantity} ×</td>
+              <td className="mono w-32 py-1">{i.serial}</td>
+              <td className="py-1">
                 {i.box_models
                   ? `${i.box_models.machine_name} ${i.box_models.machine_model}`
                   : "(caixa removida do catálogo)"}
@@ -148,14 +185,18 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
             </tr>
           ))}
           <tr>
-            <td colSpan={3} className="text-xs text-gray-500">
-              {units} caixas no total
+            <td colSpan={3} className="py-1 text-xs text-muted">
+              <span className="num">{units}</span> caixas no total
             </td>
           </tr>
         </tbody>
       </table>
 
-      <ErrorBox message={err} onClose={() => setErr(null)} />
+      {err && (
+        <div className="mt-2">
+          <ErrorBox message={err} onClose={() => setErr(null)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -172,7 +213,6 @@ function StockTable({
   const [qty, setQty] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const low = boxes.filter((b) => b.stock_available < b.min_stock).length;
 
   async function doRestock(serial: string) {
     const n = Number.parseInt(qty[serial] ?? "", 10);
@@ -190,22 +230,17 @@ function StockTable({
   }
 
   return (
-    <Section
-      title="Estoque do armazém"
-      right={
-        low > 0 ? (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-            ⚠ {low} {low === 1 ? "modelo abaixo" : "modelos abaixo"} do mínimo
-          </span>
-        ) : undefined
-      }
-    >
-      <ErrorBox message={err} onClose={() => setErr(null)} />
+    <Section title="Estoque do armazém" flush>
+      {err && (
+        <div className="p-4 pb-0">
+          <ErrorBox message={err} onClose={() => setErr(null)} />
+        </div>
+      )}
       {loading ? (
-        <p className="text-sm text-gray-500">Carregando…</p>
+        <Empty>Carregando…</Empty>
       ) : (
         <div className="overflow-x-auto">
-          <table className={err ? "mt-3" : ""}>
+          <table>
             <thead>
               <tr>
                 <th>Serial</th>
@@ -222,17 +257,21 @@ function StockTable({
               {boxes.map((b) => {
                 const isLow = b.stock_available < b.min_stock;
                 return (
-                  <tr key={b.serial} className={isLow ? "bg-amber-50" : ""}>
+                  <tr key={b.serial}>
                     <td className="mono">{b.serial}</td>
-                    <td>{b.machine_name}</td>
-                    <td>{b.machine_model}</td>
-                    <td className="num">{b.stock_total}</td>
-                    <td className="num text-gray-500">{b.stock_reserved}</td>
-                    <td className={"num font-semibold " + (isLow ? "text-amber-800" : "")}>
+                    <td className="whitespace-nowrap font-medium">{b.machine_name}</td>
+                    <td className="text-ink-2">{b.machine_model}</td>
+                    <td className="num text-ink-2">{b.stock_total}</td>
+                    <td className="num text-muted">{b.stock_reserved}</td>
+                    <td className={"num text-base font-semibold " + (isLow ? "text-amber" : "")}>
                       {b.stock_available}
-                      {isLow && <span title="Abaixo do estoque mínimo"> ⚠</span>}
+                      {isLow && (
+                        <span className="ml-1.5 text-xs font-normal text-amber" title="Abaixo do estoque mínimo">
+                          baixo
+                        </span>
+                      )}
                     </td>
-                    <td className="num text-gray-500">{b.min_stock}</td>
+                    <td className="num text-muted">{b.min_stock}</td>
                     <td>
                       <form
                         className="flex gap-1"
@@ -242,15 +281,16 @@ function StockTable({
                         }}
                       >
                         <input
-                          className={input + " w-16 num"}
+                          className={input + " w-14 num"}
                           type="number"
                           min={1}
                           placeholder="0"
                           value={qty[b.serial] ?? ""}
                           onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
+                          aria-label={`Repor ${b.machine_name} ${b.machine_model}`}
                         />
                         <button className={btn.small} type="submit" disabled={busy === b.serial}>
-                          + repor
+                          Repor
                         </button>
                       </form>
                     </td>

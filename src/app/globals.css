@@ -1,10 +1,50 @@
 @import "tailwindcss";
 
-body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+/* Tokens do tema: grafite com leve tom de aço; vermelho Lenovo como sinal. */
+@theme {
+  --color-bg: #15171c;
+  --color-surface: #1d2026;
+  --color-surface-2: #23272f;
+  --color-surface-3: #2b3039;
+  --color-line: #30353f;
+  --color-line-strong: #454b57;
+  --color-ink: #eceef2;
+  --color-ink-2: #b9bfc9;
+  --color-muted: #828a97;
+
+  --color-red: #e2231a;
+  --color-red-hover: #f23a31;
+  --color-red-soft: #3b1a1a;
+  --color-amber: #f3b43a;
+  --color-amber-soft: #3a2e14;
+  --color-green: #45d17f;
+  --color-green-soft: #163322;
+  --color-violet: #a394ff;
+  --color-violet-soft: #272340;
+  --color-sky: #62b8ff;
+  --color-sky-soft: #172b3d;
+
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
-/* Tabelas densas por padrão: função antes de estética. */
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--color-red);
+  outline-offset: 2px;
+}
+
+/* Tabelas densas: função antes de estética. */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -12,26 +52,49 @@ table {
 }
 th {
   text-align: left;
-  font-weight: 600;
-  color: #4b5563;
-  padding: 0.375rem 0.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  font-weight: 500;
+  color: var(--color-muted);
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--color-line-strong);
   white-space: nowrap;
+  font-size: 0.75rem;
 }
 td {
-  padding: 0.375rem 0.5rem;
-  border-bottom: 1px solid #f3f4f6;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--color-line);
   vertical-align: middle;
 }
 tr:last-child td {
   border-bottom: none;
+}
+tbody tr:hover td {
+  background: color-mix(in srgb, var(--color-surface-2) 60%, transparent);
 }
 .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.8125rem;
   letter-spacing: 0.02em;
+  color: var(--color-ink-2);
+}
+
+/* Campos numéricos: sem as setinhas do navegador, que quebram o alinhamento. */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
