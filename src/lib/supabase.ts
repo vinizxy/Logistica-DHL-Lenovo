@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -9,7 +9,6 @@ if (!url || !key) {
   );
 }
 
-// Um único client no browser; sem sessão de usuário (sem login nesta fase).
-export const supabase = createClient(url, key, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+// Um único client no browser. A sessão fica em cookie (@supabase/ssr), então o
+// servidor (proxy.ts) também sabe quem está logado.
+export const supabase = createBrowserClient(url, key);

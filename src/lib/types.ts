@@ -36,6 +36,7 @@ export interface Order {
   notes: string | null;
   urgent: boolean;
   eta: string | null; // previsão de entrega informada pela DHL ao despachar
+  hidden_by_lenovo: boolean; // "excluído" pela Lenovo; a DHL continua vendo
   created_at: string;
   updated_at: string;
   order_items: OrderItem[];

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { advanceOrder, cancelOrder, createOrder, deleteOrder } from "@/lib/actions";
+import { useMemo, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
+import { advanceOrder, cancelOrder, createOrder, hideOrder } from "@/lib/actions";
 import { canCancel, canDelete, fmtDate, fmtEta, fmtOrderId, isClosed, nextAction } from "@/lib/format";
 import { commentCount, fetchLenovoData } from "@/lib/queries";
 import type { BoxModel, Order } from "@/lib/types";
@@ -23,8 +24,6 @@ import {
 } from "@/components/ui";
 
 type Cart = Record<string, number>; // serial → quantidade
-
-const REQUESTER_KEY = "refurbish.requester";
 
 export default function LenovoPage() {
   const { data, error, connection, refetch } = useLiveData(fetchLenovoData);
@@ -362,20 +361,14 @@ function CartPanel({
   onSubmitted: (orderId: number) => void;
   onError: (msg: string) => void;
 }) {
-  const [requester, setRequester] = useState("");
+  const { profile } = useAuth();
+  // Solicitante vem pré-preenchido com o nome da conta; continua editável porque uma
+  // conta pode ser usada por um turno inteiro. Só vira estado quando a pessoa digita.
+  const [requesterDraft, setRequester] = useState<string | null>(null);
+  const requester = requesterDraft ?? profile?.display_name ?? "";
   const [notes, setNotes] = useState("");
   const [urgent, setUrgent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  // Lembra o nome de quem pediu da última vez (só neste navegador). Lido após a
-  // hidratação para não divergir do HTML renderizado no servidor.
-  useEffect(() => {
-    let saved = "";
-    try {
-      saved = localStorage.getItem(REQUESTER_KEY) ?? "";
-    } catch {}
-    if (saved) void Promise.resolve().then(() => setRequester(saved));
-  }, []);
 
   const entries = Object.entries(cart);
   const totalUnits = entries.reduce((s, [, q]) => s + q, 0);
@@ -385,9 +378,6 @@ function CartPanel({
     e.preventDefault();
     if (!canSubmit) return;
     setSubmitting(true);
-    try {
-      localStorage.setItem(REQUESTER_KEY, requester.trim());
-    } catch {}
     const result = await createOrder(
       requester.trim(),
       notes,
@@ -525,6 +515,7 @@ function MyOrders({
   loading: boolean;
   onChanged: () => void;
 }) {
+  const { handleActionError } = useAuth();
   const [busy, setBusy] = useState<number | null>(null);
   const [rowError, setRowError] = useState<{ id: number; msg: string } | null>(null);
 
@@ -533,7 +524,10 @@ function MyOrders({
     setRowError(null);
     const r = await fn();
     setBusy(null);
-    if (!r.ok) setRowError({ id, msg: r.error ?? "Erro desconhecido" });
+    if (!r.ok) {
+      setRowError({ id, msg: r.error ?? "Erro desconhecido" });
+      handleActionError(r.error ?? "");
+    }
     onChanged();
   }
 
@@ -577,7 +571,7 @@ function MyOrders({
                       <button
                         className={btn.primary + " flex-1"}
                         disabled={busy === o.id}
-                        onClick={() => run(o.id, () => advanceOrder(o.id, "lenovo"))}
+                        onClick={() => run(o.id, () => advanceOrder(o.id))}
                       >
                         {action.label}
                       </button>
@@ -599,8 +593,8 @@ function MyOrders({
                         className={btn.smallDanger + " px-3 py-1.5 text-sm"}
                         disabled={busy === o.id}
                         onClick={() => {
-                          if (confirm(`Excluir o pedido ${fmtOrderId(o.id)}? Itens, histórico e comentários somem junto.`))
-                            void run(o.id, () => deleteOrder(o.id));
+                          if (confirm(`Excluir o pedido ${fmtOrderId(o.id)} da sua lista? A DHL continua vendo no histórico dela.`))
+                            void run(o.id, () => hideOrder(o.id));
                         }}
                       >
                         Excluir
@@ -666,7 +660,7 @@ function MyOrders({
                           <button
                             className={btn.primary + " px-2.5 py-1 text-xs"}
                             disabled={busy === o.id}
-                            onClick={() => run(o.id, () => advanceOrder(o.id, "lenovo"))}
+                            onClick={() => run(o.id, () => advanceOrder(o.id))}
                           >
                             {action.label}
                           </button>
@@ -687,10 +681,10 @@ function MyOrders({
                           <button
                             className={btn.smallDanger}
                             disabled={busy === o.id}
-                            title="Remove o pedido da lista (itens, histórico e comentários)"
+                            title="Tira o pedido da sua lista; a DHL continua vendo no histórico dela"
                             onClick={() => {
-                              if (confirm(`Excluir o pedido ${fmtOrderId(o.id)}? Itens, histórico e comentários somem junto.`))
-                                void run(o.id, () => deleteOrder(o.id));
+                              if (confirm(`Excluir o pedido ${fmtOrderId(o.id)} da sua lista? A DHL continua vendo no histórico dela.`))
+                                void run(o.id, () => hideOrder(o.id));
                             }}
                           >
                             Excluir

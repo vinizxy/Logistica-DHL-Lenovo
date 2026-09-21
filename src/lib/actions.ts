@@ -1,8 +1,12 @@
-// Toda escrita passa pelas funções SQL (supabase/migrations/0002_functions.sql).
-// O banco valida e devolve mensagens em PT-BR prontas para a tela.
+// Toda escrita passa pelas funções SQL (supabase/migrations/). O banco valida, lê o
+// perfil de quem está logado (auth.uid()) e devolve mensagens em PT-BR prontas para a tela.
 
 import { supabase } from "./supabase";
-import type { Actor, OrderStatus, Result } from "./types";
+import type { OrderStatus, Result } from "./types";
+
+// Mensagem que o banco devolve quando a sessão não existe/expirou; o AuthProvider
+// escuta isso para mandar para /login.
+export const LOGIN_REQUIRED = "Faça login para continuar.";
 
 export interface CartItem {
   serial: string;
@@ -25,14 +29,13 @@ export async function createOrder(
   return { ok: true, data: data as number };
 }
 
+// Quem avança é o perfil logado: DHL até "em transporte", Lenovo confirma a entrega.
 export async function advanceOrder(
   orderId: number,
-  actor: Actor,
   eta?: string | null, // ISO; só faz sentido ao despachar (em_separacao → em_transporte)
 ): Promise<Result<OrderStatus>> {
   const { data, error } = await supabase.rpc("advance_order", {
     p_order_id: orderId,
-    p_actor: actor,
     p_eta: eta ?? null,
   });
   if (error) return { ok: false, error: cleanMessage(error.message) };
@@ -45,9 +48,9 @@ export async function cancelOrder(orderId: number): Promise<Result<null>> {
   return { ok: true, data: null };
 }
 
-// Só pedidos encerrados (entregue/cancelado); o banco recusa os demais.
-export async function deleteOrder(orderId: number): Promise<Result<null>> {
-  const { error } = await supabase.rpc("delete_order", { p_order_id: orderId });
+// "Excluir" da Lenovo: só oculta da lista dela (entregue/cancelado); a DHL continua vendo.
+export async function hideOrder(orderId: number): Promise<Result<null>> {
+  const { error } = await supabase.rpc("hide_order", { p_order_id: orderId });
   if (error) return { ok: false, error: cleanMessage(error.message) };
   return { ok: true, data: null };
 }
@@ -61,16 +64,10 @@ export async function restock(serial: string, quantity: number): Promise<Result<
   return { ok: true, data: data as number };
 }
 
-export async function addComment(
-  orderId: number,
-  actor: Actor,
-  author: string,
-  body: string,
-): Promise<Result<number>> {
+// Lado e nome vêm do perfil logado.
+export async function addComment(orderId: number, body: string): Promise<Result<number>> {
   const { data, error } = await supabase.rpc("add_comment", {
     p_order_id: orderId,
-    p_actor: actor,
-    p_author: author,
     p_body: body,
   });
   if (error) return { ok: false, error: cleanMessage(error.message) };

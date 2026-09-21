@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { advanceOrder } from "@/lib/actions";
 import { ACTOR_LABEL, describeEvent, fmtDate, fmtEta, fmtOrderId } from "@/lib/format";
 import { fetchOrder, fetchOrderComments, fetchOrderEvents } from "@/lib/queries";
@@ -27,6 +28,7 @@ export default function OrderPage() {
   }, [id]);
 
   const { data, error, connection, refetch } = useLiveData(fetcher);
+  const { profile } = useAuth();
 
   if (error) return <ErrorBox message={error} />;
   if (data === null) return <Empty>Carregando…</Empty>;
@@ -35,7 +37,7 @@ export default function OrderPage() {
       <Section title="Pedido não encontrado">
         <p className="text-sm text-ink-2">
           Não existe pedido {Number.isFinite(id) ? fmtOrderId(id) : `“${params.id}”`}.{" "}
-          <Link className="underline hover:text-red" href="/lenovo">
+          <Link className="underline hover:text-red" href="/">
             Voltar ao painel
           </Link>
         </p>
@@ -64,7 +66,9 @@ export default function OrderPage() {
 
       <ConnectionBanner connection={connection} />
 
-      {order.status === "em_transporte" && <ConfirmDelivery orderId={order.id} eta={order.eta} onChanged={refetch} />}
+      {order.status === "em_transporte" && profile?.role === "lenovo" && (
+        <ConfirmDelivery orderId={order.id} eta={order.eta} onChanged={refetch} />
+      )}
 
       <Section title="Andamento">
         <Timeline order={order} events={events} />
@@ -111,7 +115,7 @@ export default function OrderPage() {
 
 /**
  * Único passo que cabe à Lenovo no rastreio: fechar o ciclo quando as caixas chegam.
- * Mesma função do painel (advance_order como "lenovo"); o banco valida o status.
+ * Mesma função do painel (advance_order; o banco confere que é a Lenovo); o banco valida o status.
  */
 function ConfirmDelivery({
   orderId,
@@ -128,7 +132,7 @@ function ConfirmDelivery({
   async function confirmDelivery() {
     setBusy(true);
     setErr(null);
-    const r = await advanceOrder(orderId, "lenovo");
+    const r = await advanceOrder(orderId);
     setBusy(false);
     if (!r.ok) setErr(r.error);
     onChanged();

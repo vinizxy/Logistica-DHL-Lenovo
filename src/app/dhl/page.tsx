@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { advanceOrder, deleteOrder, restock } from "@/lib/actions";
-import { canDelete, fmtDate, fmtEta, fmtOrderId, isClosed, localDateTimeValue, nextAction, timeAgo } from "@/lib/format";
+import { advanceOrder, restock } from "@/lib/actions";
+import { fmtDate, fmtEta, fmtOrderId, isClosed, localDateTimeValue, nextAction, timeAgo } from "@/lib/format";
 import { commentCount, fetchDhlData } from "@/lib/queries";
 import type { BoxModel, Order, OrderStatus } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
@@ -149,7 +149,7 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
   async function advance(etaIso?: string | null) {
     setBusy(true);
     setErr(null);
-    const r = await advanceOrder(o.id, "dhl", etaIso);
+    const r = await advanceOrder(o.id, etaIso);
     setBusy(false);
     if (!r.ok) setErr(r.error);
     else setDispatching(false);
@@ -159,16 +159,6 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
   function startDispatch() {
     setEta(localDateTimeValue(2));
     setDispatching(true);
-  }
-
-  async function remove() {
-    if (!confirm(`Excluir o pedido ${fmtOrderId(o.id)}? Itens, histórico e comentários somem junto.`)) return;
-    setBusy(true);
-    setErr(null);
-    const r = await deleteOrder(o.id);
-    setBusy(false);
-    if (!r.ok) setErr(r.error);
-    onChanged();
   }
 
   return (
@@ -214,17 +204,6 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
         )}
         {action?.actor === "lenovo" && (
           <span className="text-xs text-muted">Aguardando a Lenovo confirmar a entrega</span>
-        )}
-        {canDelete(o.status) && (
-          <button
-            className={btn.smallDanger}
-            disabled={busy}
-            onClick={() => void remove()}
-            type="button"
-            title="Remove o pedido do histórico (itens, eventos e comentários)"
-          >
-            {busy ? "Excluindo…" : "Excluir"}
-          </button>
         )}
       </div>
 

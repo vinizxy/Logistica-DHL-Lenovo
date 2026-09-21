@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { addComment } from "@/lib/actions";
 import { ACTOR_LABEL, fmtDate } from "@/lib/format";
-import type { Actor, OrderComment } from "@/lib/types";
+import type { OrderComment } from "@/lib/types";
 import { btn, ErrorBox, input, Section } from "@/components/ui";
 
-const AUTHOR_KEY = "refurbish.commentAuthor";
-const ACTOR_KEY = "refurbish.commentActor";
-
 /**
- * Conversa do pedido entre Lenovo e DHL. Sem login, quem escreve escolhe o lado
- * e assina com o nome; o navegador lembra a escolha.
+ * Conversa do pedido entre Lenovo e DHL. Lado e nome vêm do perfil logado
+ * (o banco grava; a tela só mostra quem vai assinar).
  */
 export function Comments({
   orderId,
@@ -22,42 +20,24 @@ export function Comments({
   comments: OrderComment[];
   onChanged: () => void;
 }) {
-  const [actor, setActor] = useState<Actor>("lenovo");
-  const [author, setAuthor] = useState("");
+  const { profile, handleActionError } = useAuth();
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
-    let a = "";
-    let side: Actor | null = null;
-    try {
-      a = localStorage.getItem(AUTHOR_KEY) ?? "";
-      const s = localStorage.getItem(ACTOR_KEY);
-      if (s === "lenovo" || s === "dhl") side = s;
-    } catch {}
-    void Promise.resolve().then(() => {
-      if (a) setAuthor(a);
-      if (side) setActor(side);
-    });
-  }, []);
-
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!author.trim() || !body.trim() || busy) return;
+    if (!body.trim() || busy) return;
     setBusy(true);
     setErr(null);
-    try {
-      localStorage.setItem(AUTHOR_KEY, author.trim());
-      localStorage.setItem(ACTOR_KEY, actor);
-    } catch {}
-    const r = await addComment(orderId, actor, author.trim(), body.trim());
+    const r = await addComment(orderId, body.trim());
     setBusy(false);
     if (r.ok) {
       setBody("");
       onChanged();
     } else {
       setErr(r.error);
+      handleActionError(r.error);
     }
   }
 
@@ -91,34 +71,6 @@ export function Comments({
       )}
 
       <form className="space-y-2 border-t border-line pt-3" onSubmit={submit}>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex" role="radiogroup" aria-label="Quem está escrevendo">
-            {(["lenovo", "dhl"] as Actor[]).map((a) => (
-              <button
-                key={a}
-                type="button"
-                role="radio"
-                aria-checked={actor === a}
-                onClick={() => setActor(a)}
-                className={
-                  "border px-3 py-1.5 text-xs font-medium transition-colors first:rounded-l-sm last:rounded-r-sm " +
-                  (actor === a
-                    ? "border-red bg-red text-white"
-                    : "border-line-strong text-ink-2 hover:text-ink")
-                }
-              >
-                {ACTOR_LABEL[a]}
-              </button>
-            ))}
-          </div>
-          <input
-            className={input + " min-w-0 flex-1"}
-            placeholder="Seu nome"
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            required
-          />
-        </div>
         <textarea
           className={input + " block w-full resize-y"}
           rows={2}
@@ -129,8 +81,16 @@ export function Comments({
           required
         />
         <ErrorBox message={err} onClose={() => setErr(null)} />
-        <div className="flex justify-end">
-          <button className={btn.primary} type="submit" disabled={busy || !author.trim() || !body.trim()}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted">
+            {profile ? (
+              <>
+                Assinando como <span className="text-ink-2">{profile.display_name}</span> ·{" "}
+                {ACTOR_LABEL[profile.role]}
+              </>
+            ) : null}
+          </span>
+          <button className={btn.primary} type="submit" disabled={busy || !body.trim()}>
             {busy ? "Enviando…" : "Enviar comentário"}
           </button>
         </div>
@@ -138,4 +98,3 @@ export function Comments({
     </Section>
   );
 }
-

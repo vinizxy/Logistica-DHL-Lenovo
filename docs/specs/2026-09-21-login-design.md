@@ -1,7 +1,7 @@
 # Login e perfis — Lenovo × DHL
 
 **Data:** 2026-09-21
-**Status:** aprovado em conversa; aguardando revisão da spec escrita
+**Status:** implementado (migração 0007, commit da tela em 2026-09-21)
 **Depende de:** spec de 2026-09-20 (sistema base), migrações 0001–0006
 
 ## 1. Objetivo

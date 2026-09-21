@@ -6,7 +6,8 @@ import "@fontsource/ibm-plex-sans/latin-600.css";
 import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
 import "./globals.css";
-import { Nav } from "@/components/ui";
+import { AuthProvider } from "@/components/AuthProvider";
+import { Shell } from "@/components/Shell";
 
 export const metadata: Metadata = {
   title: "Caixas Refurbish — Lenovo × DHL",
@@ -17,8 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="pt-BR">
       <body className="min-h-screen antialiased">
-        <Nav />
-        <main className="mx-auto max-w-6xl space-y-4 px-4 py-5">{children}</main>
+        <AuthProvider>
+          <Shell>{children}</Shell>
+        </AuthProvider>
       </body>
     </html>
   );

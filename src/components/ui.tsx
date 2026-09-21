@@ -3,12 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/components/AuthProvider";
+import { HOME } from "@/lib/auth";
 import type { Connection } from "@/lib/useLiveData";
 import { STATUS_LABEL } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 
 export function Nav() {
   const path = usePathname();
+  const { profile, signOut } = useAuth();
   const link = (href: string, label: string, panel = true) => {
     const active = path === href || path.startsWith(href + "/");
     return (
@@ -25,10 +28,11 @@ export function Nav() {
       </Link>
     );
   };
+  const home = profile ? HOME[profile.role] : "/login";
   return (
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4">
-        <Link href="/lenovo" className="flex items-center gap-3 py-2.5">
+        <Link href={home} className="flex items-center gap-3 py-2.5">
           {/* Logo em public/lenovo-logo.png — trocar o arquivo troca a marca. */}
           <Image
             src="/lenovo-logo.png"
@@ -43,10 +47,25 @@ export function Nav() {
           </span>
           <span className="hidden text-sm text-muted sm:inline">com DHL</span>
         </Link>
-        <nav className="flex">
-          {link("/lenovo", "Lenovo")}
-          {link("/dhl", "DHL")}
-          {link("/cadastro", "Cadastro", false)}
+        {/* Só o painel do perfil; o proxy barra o outro lado de qualquer jeito. */}
+        <nav className="flex items-center">
+          {profile?.role === "lenovo" && link("/lenovo", "Lenovo")}
+          {profile?.role === "dhl" && link("/dhl", "DHL")}
+          {profile?.role === "dhl" && link("/cadastro", "Cadastro", false)}
+          {profile && (
+            <>
+              <span className="ml-3 hidden max-w-[12rem] truncate border-l border-line pl-3 text-sm text-ink-2 sm:inline" title={profile.display_name}>
+                {profile.display_name}
+              </span>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="ml-2 px-2 py-3 text-sm text-muted transition-colors hover:text-red"
+              >
+                Sair
+              </button>
+            </>
+          )}
         </nav>
       </div>
     </header>

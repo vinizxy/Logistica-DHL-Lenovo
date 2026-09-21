@@ -2,7 +2,7 @@ import { supabase } from "./supabase";
 import type { BoxModel, Order, OrderComment, OrderEvent } from "./types";
 
 const ORDER_SELECT =
-  "id, status, requested_by, notes, urgent, eta, created_at, updated_at, order_items(order_id, serial, quantity, box_models(machine_name, machine_model)), order_comments(count)";
+  "id, status, requested_by, notes, urgent, eta, hidden_by_lenovo, created_at, updated_at, order_items(order_id, serial, quantity, box_models(machine_name, machine_model)), order_comments(count)";
 
 export async function fetchBoxes(): Promise<BoxModel[]> {
   const { data, error } = await supabase
@@ -14,11 +14,12 @@ export async function fetchBoxes(): Promise<BoxModel[]> {
   return data as BoxModel[];
 }
 
-export async function fetchOrders(): Promise<Order[]> {
-  const { data, error } = await supabase
-    .from("orders")
-    .select(ORDER_SELECT)
-    .order("created_at", { ascending: false });
+// `visibleTo: "lenovo"` deixa de fora o que a Lenovo "excluiu" (hidden_by_lenovo);
+// a DHL vê tudo.
+export async function fetchOrders(visibleTo: "lenovo" | "dhl" = "dhl"): Promise<Order[]> {
+  let q = supabase.from("orders").select(ORDER_SELECT).order("created_at", { ascending: false });
+  if (visibleTo === "lenovo") q = q.eq("hidden_by_lenovo", false);
+  const { data, error } = await q;
   if (error) throw new Error(error.message);
   return sortItems(data as unknown as Order[]);
 }
@@ -58,11 +59,14 @@ export async function fetchOrderEvents(orderId: number): Promise<OrderEvent[]> {
 // Fetchers compostos por página. Definidos no módulo para terem identidade estável
 // (o hook useLiveData depende disso para não reassinar o canal a cada render).
 export async function fetchLenovoData() {
-  const [boxes, orders] = await Promise.all([fetchBoxes(), fetchOrders()]);
+  const [boxes, orders] = await Promise.all([fetchBoxes(), fetchOrders("lenovo")]);
   return { boxes, orders };
 }
 
-export const fetchDhlData = fetchLenovoData;
+export async function fetchDhlData() {
+  const [boxes, orders] = await Promise.all([fetchBoxes(), fetchOrders("dhl")]);
+  return { boxes, orders };
+}
 
 export function commentCount(o: Order): number {
   return o.order_comments?.[0]?.count ?? 0;

@@ -9,14 +9,33 @@ pedido em tempo real.
 - **Spec:** [docs/specs/2026-09-20-lenovo-dhl-refurbish-design.md](docs/specs/2026-09-20-lenovo-dhl-refurbish-design.md)
 - **Plano:** [docs/specs/2026-09-20-plano-implementacao.md](docs/specs/2026-09-20-plano-implementacao.md)
 
+## Login e perfis
+
+Cada conta tem um perfil **Lenovo** ou **DHL** e só vê o próprio painel. O banco confere o
+perfil dentro de cada função: uma conta DHL não cria pedido nem pela API, uma conta Lenovo não
+repõe estoque. Sem login, a API não lê nem escreve nada.
+
+- `/login` — escolha o lado (logo Lenovo ou DHL), e-mail e senha. Conta do outro lado é recusada
+  com aviso. Depois de entrar, cada perfil cai no seu painel e o outro redireciona.
+- Contas são criadas pelo administrador (sem cadastro público): `node --dns-result-order=ipv4first
+  supabase/scripts/create_test_users.mjs <email> <senha> <lenovo|dhl> "<nome>"` com a service
+  role no `.env.local`, ou em Authentication → Add user no painel do Supabase (com `role` e
+  `display_name` no user metadata). Outro domínio de e-mail sem `role` é recusado pelo banco.
+- Contas de teste: `teste123@lenovo.com` / `teste123@dhl.com`, senha `teste123`.
+- Spec: [docs/specs/2026-09-21-login-design.md](docs/specs/2026-09-21-login-design.md).
+
+> Desligue **Authentication → Providers → Email → "Enable sign ups"** no painel do Supabase para
+> fechar o cadastro público de vez (o trigger já restringe a `@lenovo.com` / `@dhl.com`).
+
 ## Telas
 
-| Rota | Quem usa | O que faz |
+| Rota | Perfil | O que faz |
 |---|---|---|
-| `/lenovo` | Linha de refurbish | Vê estoque disponível (com busca), monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados |
-| `/dhl` | Armazém | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com busca e alerta de mínimo, reposição, exclui pedidos do histórico |
-| `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários entre Lenovo e DHL; a Lenovo confirma a entrega por aqui também |
-| `/cadastro` | Admin | Catálogo de caixas: incluir modelo novo (serial gerado), editar nome/modelo/mínimo, descontinuar/reativar |
+| `/login` | — | Entrar como Lenovo ou DHL |
+| `/lenovo` | Lenovo | Vê estoque disponível (com busca), monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados **da própria lista** (a DHL continua vendo) |
+| `/dhl` | DHL | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com busca e alerta de mínimo, reposição; histórico permanente |
+| `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários (assinados pelo perfil); a Lenovo confirma a entrega por aqui também |
+| `/cadastro` | DHL | Catálogo de caixas: incluir modelo novo (serial gerado), editar nome/modelo/mínimo, descontinuar/reativar |
 
 ## Fluxo de um pedido
 
@@ -30,12 +49,12 @@ Lenovo cria ──► Enviado ──► Recebido ──► Em separação ──
 ## Stack
 
 - **Next.js 16** (App Router, TypeScript, Tailwind) — deploy na Vercel
-- **Supabase** — Postgres 17 + Realtime
-- Regras de negócio em **funções SQL** (`supabase/migrations/0002_functions.sql`): reservar,
-  baixar e liberar estoque acontece em transação, com trava de linha. O frontend só chama
-  `rpc()` e mostra a mensagem que o banco devolve.
-- Sem login nesta fase. RLS permite leitura pública e **nenhuma escrita direta** — toda
-  escrita passa pelas funções.
+- **Supabase** — Postgres 17 + Auth + Realtime; sessão em cookie via `@supabase/ssr`,
+  `src/proxy.ts` faz o roteamento por perfil
+- Regras de negócio em **funções SQL** (`supabase/migrations/`): reservar, baixar e liberar
+  estoque acontece em transação, com trava de linha; cada função lê `auth.uid()` e recusa o
+  perfil errado. O frontend só chama `rpc()` e mostra a mensagem que o banco devolve.
+- RLS: leitura só para logados e **nenhuma escrita direta** — toda escrita passa pelas funções.
 
 ## Rodar localmente
 
@@ -55,18 +74,23 @@ Migrações em `supabase/migrations/`, na ordem:
 4. `0004_urgent_eta_comments_catalog.sql` — pedido urgente, previsão de entrega, comentários, cadastro de caixas
 5. `0005_delete_order.sql` — `delete_order`: exclui só pedidos entregues/cancelados (em andamento, cancele antes)
 6. `0006_hardening.sql` — limites de tamanho/quantidade com mensagens legíveis, tetos de estoque, EXECUTE revogado das funções internas
+7. `0007_auth.sql` — perfis (`profiles`, trigger em `auth.users`), `require_role()` em toda função, `hide_order` no lugar de `delete_order`, leitura/EXECUTE só para `authenticated`, colunas de auditoria (`created_by`, `user_id`)
 
 Testes (todos com rollback proposital: rodam inteiros numa transação e terminam com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado; sucesso = `0 falhas`):
 
-- `supabase/tests/rules.sql` (43) — regras de estoque e fluxo de status
-- `supabase/tests/features.sql` (20) — urgente, previsão, comentários, cadastro, exclusão
-- `supabase/tests/security.sql` (45) — papel `anon` não escreve direto em tabela nenhuma; funções internas
-  sem EXECUTE; entradas hostis (20 mil caracteres, quantidades absurdas, HTML/SQL no texto, JSON
-  malformado) recusadas com mensagem legível; invariantes de estoque no banco inteiro
-- `supabase/tests/concurrency.mjs` (7) — pela API pública: 12 pedidos simultâneos brigando pelo mesmo
-  estoque, cliques paralelos em avançar/cancelar. Roda com
-  `node --dns-result-order=ipv4first supabase/tests/concurrency.mjs`; cria e remove os próprios dados.
+Os `.sql` simulam a sessão de cada conta de teste (`request.jwt.claim.sub`), então as contas
+precisam existir.
+
+- `supabase/tests/rules.sql` (29) — regras de estoque e fluxo de status
+- `supabase/tests/features.sql` (22) — urgente, previsão, comentários, cadastro, ocultação
+- `supabase/tests/security.sql` (62) — sem login nada lê nem escreve; logado não escreve direto em
+  tabela; cada perfil só executa o que é dele (seção P); funções internas sem EXECUTE; entradas
+  hostis recusadas com mensagem legível; invariantes de estoque no banco inteiro
+- `supabase/tests/concurrency.mjs` (19) — pela API, com login: acesso por perfil, 12 pedidos
+  simultâneos brigando pelo mesmo estoque, cliques paralelos em avançar/cancelar, `hide_order`.
+  Roda com `node --dns-result-order=ipv4first supabase/tests/concurrency.mjs`; os pedidos de
+  teste ficam encerrados e ocultos da Lenovo (o `reset_demo.sql` limpa).
 
 Cole os `.sql` no SQL Editor do Supabase e leia o relatório na mensagem de erro.
 
