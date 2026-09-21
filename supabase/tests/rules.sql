@@ -10,6 +10,18 @@ language sql as $$
   insert into test_results (line)
   values ((case when cond then 'ok     ' else 'FALHOU ' end) || label);
 $$;
+-- Sessão simulada: auth.uid() lê request.jwt.claim.sub. As contas de teste precisam
+-- existir (supabase/scripts/create_test_users.mjs).
+create function pg_temp.as_user(p_email text) returns void language plpgsql security definer as $$
+declare v uuid;
+begin
+  select id into v from auth.users where email = p_email;
+  if v is null then raise exception 'conta de teste % não existe (rode supabase/scripts/create_test_users.mjs)', p_email; end if;
+  perform set_config('request.jwt.claim.sub', v::text, true);
+end $$;
+create function pg_temp.as_lenovo() returns void language sql as $$ select pg_temp.as_user('teste123@lenovo.com') $$;
+create function pg_temp.as_dhl()    returns void language sql as $$ select pg_temp.as_user('teste123@dhl.com') $$;
+create function pg_temp.as_nobody() returns void language sql as $$ select set_config('request.jwt.claim.sub', '', true) $$;
 
 do $test$
 declare
@@ -20,6 +32,7 @@ declare
   n  integer;
   msg text;
 begin
+  perform pg_temp.as_lenovo();  -- padrão: Lenovo; troca pontualmente para DHL
   -- Caixas de teste (removidas pelo rollback)
   insert into public.box_models (serial, machine_name, machine_model, stock_total, min_stock)
   values ('TESTBOX001', 'Teste Caixa A', 'v1', 100, 10),
@@ -50,38 +63,42 @@ begin
   perform pg_temp.ok((select count(*) from public.orders) = n, '2c nenhum pedido novo gravado');
 
   -- 3. fluxo completo
-  st := public.advance_order(o1, 'dhl');  perform pg_temp.ok(st = 'recebido',      '3a enviado → recebido');
-  st := public.advance_order(o1, 'dhl');  perform pg_temp.ok(st = 'em_separacao',  '3b recebido → em_separacao');
-  st := public.advance_order(o1, 'dhl');  perform pg_temp.ok(st = 'em_transporte', '3c em_separacao → em_transporte');
+  perform pg_temp.as_dhl();
+  st := public.advance_order(o1);  perform pg_temp.ok(st = 'recebido',      '3a enviado → recebido');
+  st := public.advance_order(o1);  perform pg_temp.ok(st = 'em_separacao',  '3b recebido → em_separacao');
+  st := public.advance_order(o1);  perform pg_temp.ok(st = 'em_transporte', '3c em_separacao → em_transporte');
   select * into b1 from public.box_models where serial = 'TESTBOX001';
   select * into b2 from public.box_models where serial = 'TESTBOX002';
   perform pg_temp.ok(b1.stock_total = 70 and b1.stock_reserved = 0, '3d baixa real box1: total 70, reservado 0');
   perform pg_temp.ok(b2.stock_total = 40 and b2.stock_reserved = 0, '3e baixa real box2: total 40, reservado 0');
-  st := public.advance_order(o1, 'lenovo'); perform pg_temp.ok(st = 'entregue',    '3f em_transporte → entregue (lenovo)');
+  perform pg_temp.as_lenovo();
+  st := public.advance_order(o1); perform pg_temp.ok(st = 'entregue',    '3f em_transporte → entregue (lenovo)');
   select count(*) into n from public.order_events where order_id = o1;
   perform pg_temp.ok(n = 5, '3g 5 eventos no histórico');
 
   -- 4. ator errado
   o2 := public.create_order('Tester', 'obs', '[{"serial":"TESTBOX001","quantity":5}]');
   begin
-    perform public.advance_order(o2, 'lenovo');
+    perform public.advance_order(o2);
     perform pg_temp.ok(false, '4a lenovo não deveria avançar "enviado"');
   exception when others then
     perform pg_temp.ok(sqlerrm like '%DHL%', '4a lenovo barrado em enviado: ' || sqlerrm);
   end;
-  perform public.advance_order(o2, 'dhl');
-  perform public.advance_order(o2, 'dhl');
-  perform public.advance_order(o2, 'dhl');   -- em_transporte
+  perform pg_temp.as_dhl();
+  perform public.advance_order(o2);
+  perform public.advance_order(o2);
+  perform public.advance_order(o2);   -- em_transporte
   begin
-    perform public.advance_order(o2, 'dhl');
+    perform public.advance_order(o2);
     perform pg_temp.ok(false, '4b dhl não deveria confirmar entrega');
   exception when others then
     perform pg_temp.ok(sqlerrm like '%LENOVO%', '4b dhl barrada em em_transporte: ' || sqlerrm);
   end;
 
   -- 5. avançar pedido finalizado
+  perform pg_temp.as_lenovo();
   begin
-    perform public.advance_order(o1, 'lenovo');
+    perform public.advance_order(o1);
     perform pg_temp.ok(false, '5a entregue não deveria avançar');
   exception when others then
     perform pg_temp.ok(sqlerrm like '%Entregue%', '5a pedido entregue não avança: ' || sqlerrm);
@@ -102,8 +119,10 @@ begin
     perform pg_temp.ok(true, '6d cancelar de novo é recusado: ' || sqlerrm);
   end;
   o4 := public.create_order('Tester', null, '[{"serial":"TESTBOX002","quantity":3}]');
-  perform public.advance_order(o4, 'dhl');
-  perform public.advance_order(o4, 'dhl');   -- em_separacao
+  perform pg_temp.as_dhl();
+  perform public.advance_order(o4);
+  perform public.advance_order(o4);   -- em_separacao
+  perform pg_temp.as_lenovo();
   begin
     perform public.cancel_order(o4);
     perform pg_temp.ok(false, '6e cancelar em separação deveria falhar');
@@ -112,6 +131,7 @@ begin
   end;
 
   -- 7. reposição
+  perform pg_temp.as_dhl();
   n := public.restock('TESTBOX001', 20);
   perform pg_temp.ok(n = 85, '7a restock +20 → total 85 (100 −30 o1 −5 o2 +20)');
   begin
@@ -126,6 +146,8 @@ begin
   exception when others then
     perform pg_temp.ok(true, '7c serial inexistente recusado: ' || sqlerrm);
   end;
+
+  perform pg_temp.as_lenovo();
 
   -- 8. validações de entrada
   begin

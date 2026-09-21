@@ -1,105 +1,111 @@
-// Teste de concorrência pela API pública (o que não dá para simular dentro de uma
-// transação SQL): N pedidos simultâneos brigando pelo mesmo estoque.
-// Cria uma caixa de teste, dispara os pedidos em paralelo, confere que a reserva nunca
-// passa do disponível, e limpa tudo pelas próprias funções do sistema.
+// Testes pela API pública, com login (o que não dá para simular numa transação SQL):
+//   A) acesso: sem sessão nada lê nem escreve; cada perfil só faz o que é dele
+//   B) concorrência: N pedidos simultâneos brigando pelo mesmo estoque; cliques paralelos
+// Cria uma caixa de teste (como DHL), pedidos (como Lenovo) e limpa pelas funções do sistema.
+// Nada é apagado: os pedidos de teste ficam encerrados e ocultos da Lenovo
+// (requested_by 'Paralelo N'); o reset_demo.sql limpa de vez.
 //
 // Uso:  node --dns-result-order=ipv4first supabase/tests/concurrency.mjs   (lê .env.local)
-// (a flag evita timeout de conexão IPv6 em algumas redes Windows)
 
-import { readFileSync } from "node:fs";
-
-const env = Object.fromEntries(
-  readFileSync(new URL("../../.env.local", import.meta.url), "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l.includes("="))
-    .map((l) => l.split("=").map((s) => s.trim())),
-);
-const URL_ = env.NEXT_PUBLIC_SUPABASE_URL;
-const KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const headers = { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
-
-// Falha de rede (antes de qualquer resposta) → tenta de novo; nunca repete uma chamada respondida.
-async function fetchRetry(url, init, tries = 4) {
-  for (let i = 1; ; i++) {
-    try { return await fetch(url, init); }
-    catch (e) { if (i >= tries) throw e; await new Promise((r) => setTimeout(r, 500 * i)); }
-  }
-}
-async function rpc(fn, body) {
-  const r = await fetchRetry(`${URL_}/rest/v1/rpc/${fn}`, { method: "POST", headers, body: JSON.stringify(body) });
-  const text = await r.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = text; }
-  return { ok: r.ok, status: r.status, data };
-}
-async function select(table, query) {
-  const r = await fetchRetry(`${URL_}/rest/v1/${table}?${query}`, { headers });
-  return r.json();
-}
+import { login, rpc, select } from "./_api.mjs";
 
 let fails = 0;
 const ok = (cond, label) => { console.log((cond ? "ok     " : "FALHOU ") + label); if (!cond) fails++; };
 
 const STOCK = 50, N = 12, QTY = 7; // 12 × 7 = 84 pedidos para 50 caixas → só 7 cabem
 const created = [];
+let dhl, lenovo, serial;
 try {
-  const box = await rpc("create_box_model", { p_serial: null, p_machine_name: "Concorrência Teste", p_machine_model: "zz", p_stock_total: STOCK, p_min_stock: 0 });
+  dhl = await login("dhl");
+  lenovo = await login("lenovo");
+
+  // A. acesso -------------------------------------------------------------------------
+  let r = await select(null, "orders", "select=id&limit=1");
+  ok(!r.ok || (Array.isArray(r.data) && r.data.length === 0), `A1 sem sessão não lê pedidos (${r.status})`);
+  r = await select(null, "box_models", "select=serial&limit=1");
+  ok(!r.ok || (Array.isArray(r.data) && r.data.length === 0), `A2 sem sessão não lê estoque (${r.status})`);
+  r = await rpc(null, "restock", { p_serial: "E5A8N99V99", p_quantity: 1 });
+  ok(!r.ok, `A3 sem sessão não repõe (${r.status}: ${String(r.data?.message ?? r.data).slice(0, 60)})`);
+  r = await rpc(lenovo, "restock", { p_serial: "E5A8N99V99", p_quantity: 1 });
+  ok(!r.ok && /DHL/.test(r.data?.message ?? ""), `A4 Lenovo não repõe: ${r.data?.message}`);
+  r = await rpc(dhl, "create_order", { p_requested_by: "x", p_notes: null, p_items: [{ serial: "E5A8N99V99", quantity: 1 }] });
+  ok(!r.ok && /LENOVO/.test(r.data?.message ?? ""), `A5 DHL não pede: ${r.data?.message}`);
+  r = await rpc(lenovo, "create_box_model", { p_serial: null, p_machine_name: "x", p_machine_model: "y", p_stock_total: 1, p_min_stock: 0 });
+  ok(!r.ok && /DHL/.test(r.data?.message ?? ""), `A6 Lenovo não cadastra caixa: ${r.data?.message}`);
+  r = await select(lenovo, "orders", "select=id&limit=1");
+  ok(r.ok, `A7 logado lê pedidos (${r.status})`);
+  r = await select(lenovo, "profiles", "select=role,display_name&order=role");
+  ok(r.ok && r.data.length >= 2, `A8 logado lê perfis (${r.data?.map?.((p) => p.role).join(",")})`);
+
+  // B. concorrência ---------------------------------------------------------------------
+  const box = await rpc(dhl, "create_box_model", { p_serial: null, p_machine_name: "Concorrência Teste", p_machine_model: "zz", p_stock_total: STOCK, p_min_stock: 0 });
   if (!box.ok) throw new Error("create_box_model: " + JSON.stringify(box.data));
-  const serial = box.data;
+  serial = box.data;
   console.log(`caixa de teste ${serial}, estoque ${STOCK}; ${N} pedidos de ${QTY} em paralelo`);
 
   const t0 = Date.now();
   const results = await Promise.all(
     Array.from({ length: N }, (_, i) =>
-      rpc("create_order", { p_requested_by: `Paralelo ${i + 1}`, p_notes: null, p_items: [{ serial, quantity: QTY }], p_urgent: false }),
+      rpc(lenovo, "create_order", { p_requested_by: `Paralelo ${i + 1}`, p_notes: null, p_items: [{ serial, quantity: QTY }], p_urgent: false }),
     ),
   );
   const ms = Date.now() - t0;
-  const okOnes = results.filter((r) => r.ok);
-  const rejected = results.filter((r) => !r.ok);
-  for (const r of okOnes) created.push(r.data);
+  const okOnes = results.filter((x) => x.ok);
+  const rejected = results.filter((x) => !x.ok);
+  for (const x of okOnes) created.push(x.data);
 
-  ok(okOnes.length === Math.floor(STOCK / QTY), `1 exatamente ${Math.floor(STOCK / QTY)} pedidos aceitos (aceitos: ${okOnes.length}, recusados: ${rejected.length}, ${ms} ms)`);
-  ok(rejected.every((r) => r.status === 400 && /disponíveis/.test(r.data?.message ?? "")), "2 recusados com a mensagem de estoque, não erro interno");
-  const [b] = await select("box_models", `serial=eq.${serial}&select=stock_total,stock_reserved,stock_available`);
-  ok(b.stock_reserved === okOnes.length * QTY && b.stock_reserved <= b.stock_total, `3 reserva = ${b.stock_reserved} ≤ total ${b.stock_total} (nunca furou)`);
+  ok(okOnes.length === Math.floor(STOCK / QTY), `B1 exatamente ${Math.floor(STOCK / QTY)} pedidos aceitos (aceitos: ${okOnes.length}, recusados: ${rejected.length}, ${ms} ms)`);
+  ok(rejected.every((x) => x.status === 400 && /disponíveis/.test(x.data?.message ?? "")), "B2 recusados com a mensagem de estoque, não erro interno");
+  let b = (await select(dhl, "box_models", `serial=eq.${serial}&select=stock_total,stock_reserved`)).data[0];
+  ok(b.stock_reserved === okOnes.length * QTY && b.stock_reserved <= b.stock_total, `B3 reserva = ${b.stock_reserved} ≤ total ${b.stock_total} (nunca furou)`);
 
-  // avanços simultâneos do mesmo pedido: só um deve passar por etapa
+  // 5 cliques em paralelo no mesmo pedido: cada um pega o lock e avança a partir do estado
+  // atual; no máximo 3 passam (enviado→recebido→em_separacao→em_transporte), sem pular etapa.
   const id = created[0];
-  const adv = await Promise.all(Array.from({ length: 5 }, () => rpc("advance_order", { p_order_id: id, p_actor: "dhl", p_eta: null })));
-  const advOk = adv.filter((r) => r.ok).length;
-  const [o] = await select("orders", `id=eq.${id}&select=status`);
-  // 5 cliques em paralelo no mesmo pedido: cada um pega o lock e avança a partir do estado atual,
-  // então no máximo 3 passam (enviado→recebido→em_separacao→em_transporte) e nunca "pula" etapa.
-  ok(advOk <= 3 && ["recebido", "em_separacao", "em_transporte"].includes(o.status), `4 avanços paralelos serializados (passaram ${advOk}, status final ${o.status})`);
-  const ev = await select("order_events", `order_id=eq.${id}&select=from_status,to_status&order=id`);
-  const chain = ev.every((e, i) => i === 0 || e.from_status === ev[i - 1].to_status);
-  ok(chain, "5 histórico do pedido é uma cadeia contínua (sem etapa pulada ou repetida)");
+  const adv = await Promise.all(Array.from({ length: 5 }, () => rpc(dhl, "advance_order", { p_order_id: id, p_eta: null })));
+  const advOk = adv.filter((x) => x.ok).length;
+  const o = (await select(dhl, "orders", `id=eq.${id}&select=status`)).data[0];
+  ok(advOk <= 3 && ["recebido", "em_separacao", "em_transporte"].includes(o.status), `B4 avanços paralelos serializados (passaram ${advOk}, status final ${o.status})`);
+  const ev = (await select(dhl, "order_events", `order_id=eq.${id}&select=from_status,to_status,actor,user_id&order=id`)).data;
+  ok(ev.every((e, i) => i === 0 || e.from_status === ev[i - 1].to_status), "B5 histórico do pedido é uma cadeia contínua (sem etapa pulada ou repetida)");
+  ok(ev.every((e) => e.user_id) && ev[0].actor === "lenovo" && ev.slice(1).every((e) => e.actor === "dhl"), "B6 eventos gravam quem fez (user_id) e o ator vem do perfil");
+
+  // perfil errado para a etapa atual: em transporte só a Lenovo confirma; antes disso só a DHL move
+  const wrong = o.status === "em_transporte" ? dhl : lenovo;
+  r = await rpc(wrong, "advance_order", { p_order_id: id, p_eta: null });
+  ok(!r.ok && /Só a (DHL|LENOVO)/.test(r.data?.message ?? ""), `B7 avanço pelo perfil errado recusado: ${r.data?.message}`);
 
   // cancelamentos simultâneos: a reserva só volta uma vez
   const id2 = created[1];
-  const canc = await Promise.all(Array.from({ length: 5 }, () => rpc("cancel_order", { p_order_id: id2 })));
-  const [b2] = await select("box_models", `serial=eq.${serial}&select=stock_reserved`);
-  ok(canc.filter((r) => r.ok).length === 1 && b2.stock_reserved === (okOnes.length - 2) * QTY, // −1 despachado no teste 4, −1 cancelado aqui
-      `6 cancelar 5× em paralelo libera a reserva uma vez só (reserva ${b2.stock_reserved})`);
+  const canc = await Promise.all(Array.from({ length: 5 }, () => rpc(lenovo, "cancel_order", { p_order_id: id2 })));
+  b = (await select(dhl, "box_models", `serial=eq.${serial}&select=stock_reserved`)).data[0];
+  // −1 pedido despachado em B4 (se chegou a em_transporte), −1 cancelado aqui
+  const dispatched = o.status === "em_transporte" ? 1 : 0;
+  ok(canc.filter((x) => x.ok).length === 1 && b.stock_reserved === (okOnes.length - 1 - dispatched) * QTY, `B8 cancelar 5× em paralelo libera a reserva uma vez só (reserva ${b.stock_reserved})`);
+
+  // hide_order: some da Lenovo, fica para a DHL
+  r = await rpc(lenovo, "hide_order", { p_order_id: id2 });
+  const stillThere = (await select(dhl, "orders", `id=eq.${id2}&select=id,hidden_by_lenovo`)).data[0];
+  ok(r.ok && stillThere?.hidden_by_lenovo === true, "B9 hide_order marca hidden_by_lenovo e a linha continua existindo");
+  r = await rpc(dhl, "hide_order", { p_order_id: id2 });
+  ok(!r.ok && /LENOVO/.test(r.data?.message ?? ""), `B10 DHL não oculta pedido: ${r.data?.message}`);
 } catch (e) {
   console.error("erro:", e.message, e.cause ?? "");
   fails++;
 } finally {
-  // limpeza pelas funções do sistema: leva cada pedido a um estado final e exclui
+  // limpeza pelas funções do sistema: leva cada pedido a um estado final e oculta da Lenovo
   for (const id of created) {
-    const [o] = await select("orders", `id=eq.${id}&select=status`);
+    const o = (await select(dhl, "orders", `id=eq.${id}&select=status`)).data?.[0];
     if (!o) continue;
-    if (o.status === "enviado" || o.status === "recebido") await rpc("cancel_order", { p_order_id: id });
-    else if (o.status === "em_separacao") { await rpc("advance_order", { p_order_id: id, p_actor: "dhl", p_eta: null }); await rpc("advance_order", { p_order_id: id, p_actor: "lenovo", p_eta: null }); }
-    else if (o.status === "em_transporte") await rpc("advance_order", { p_order_id: id, p_actor: "lenovo", p_eta: null });
-    await rpc("delete_order", { p_order_id: id });
+    if (o.status === "enviado" || o.status === "recebido") await rpc(lenovo, "cancel_order", { p_order_id: id });
+    else if (o.status === "em_separacao") { await rpc(dhl, "advance_order", { p_order_id: id, p_eta: null }); await rpc(lenovo, "advance_order", { p_order_id: id, p_eta: null }); }
+    else if (o.status === "em_transporte") await rpc(lenovo, "advance_order", { p_order_id: id, p_eta: null });
+    await rpc(lenovo, "hide_order", { p_order_id: id });
   }
-  const boxes = await select("box_models", `machine_name=eq.${encodeURIComponent("Concorrência Teste")}&select=serial,stock_reserved`);
-  for (const b of boxes) await rpc("update_box_model", { p_serial: b.serial, p_machine_name: "Concorrência Teste", p_machine_model: "zz", p_min_stock: 0, p_active: false });
-  const left = await select("orders", `requested_by=like.Paralelo*&select=id`);
-  ok(left.length === 0, `7 limpeza: nenhum pedido de teste sobrou (${left.length})`);
-  console.log(boxes.length ? `caixa de teste ${boxes.map((b) => b.serial).join(", ")} descontinuada (o catálogo não tem exclusão; remova em /cadastro ou via SQL se quiser)` : "");
+  if (serial) await rpc(dhl, "update_box_model", { p_serial: serial, p_machine_name: "Concorrência Teste", p_machine_model: "zz", p_min_stock: 0, p_active: false });
+  const open = (await select(dhl, "orders", `requested_by=like.Paralelo*&status=in.(enviado,recebido,em_separacao,em_transporte)&select=id`)).data;
+  ok(Array.isArray(open) && open.length === 0, `C1 limpeza: nenhum pedido de teste em aberto (${open?.length})`);
+  if (serial) console.log(`caixa de teste ${serial} descontinuada; pedidos de teste ficam no histórico da DHL (reset_demo.sql limpa)`);
   console.log(`=== ${fails} falhas ===`);
   process.exit(fails ? 1 : 0);
 }

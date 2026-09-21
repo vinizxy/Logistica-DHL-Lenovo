@@ -13,6 +13,8 @@ alter table public.orders alter column id restart with 1;
 alter table public.order_events alter column id restart with 1;
 alter table public.order_comments alter column id restart with 1;
 
+update public.orders set hidden_by_lenovo = false where hidden_by_lenovo; -- (sem efeito após o delete; mantido por clareza)
+
 update public.box_models b
    set stock_total = v.total,
        stock_reserved = 0
