@@ -13,8 +13,8 @@ pedido em tempo real.
 
 | Rota | Quem usa | O que faz |
 |---|---|---|
-| `/lenovo` | Linha de refurbish | Vê estoque disponível, monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela |
-| `/dhl` | Armazém | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com alerta de mínimo, reposição |
+| `/lenovo` | Linha de refurbish | Vê estoque disponível (com busca), monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados |
+| `/dhl` | Armazém | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com busca e alerta de mínimo, reposição, exclui pedidos do histórico |
 | `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários entre Lenovo e DHL |
 | `/cadastro` | Admin | Catálogo de caixas: incluir modelo novo (serial gerado), editar nome/modelo/mínimo, descontinuar/reativar |
 
@@ -53,8 +53,9 @@ Migrações em `supabase/migrations/`, na ordem:
 2. `0002_functions.sql` — `create_order`, `advance_order`, `cancel_order`, `restock`
 3. `0003_seed.sql` — 13 tipos de caixa e 5 pedidos de exemplo (criados via funções)
 4. `0004_urgent_eta_comments_catalog.sql` — pedido urgente, previsão de entrega, comentários, cadastro de caixas
+5. `0005_delete_order.sql` — `delete_order`: exclui só pedidos entregues/cancelados (em andamento, cancele antes)
 
-Testes das regras: `supabase/tests/rules.sql` (29 asserções) e `supabase/tests/features.sql` (14). Roda inteiro numa transação e termina com um
+Testes das regras: `supabase/tests/rules.sql` (29 asserções) e `supabase/tests/features.sql` (20). Roda inteiro numa transação e termina com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado. Cole no SQL Editor do Supabase
 e leia o relatório na mensagem de erro; sucesso = `0 falhas`.
 

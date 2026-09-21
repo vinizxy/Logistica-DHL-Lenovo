@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { advanceOrder, cancelOrder, createOrder } from "@/lib/actions";
-import { canCancel, fmtDate, fmtEta, fmtOrderId, isClosed, nextAction } from "@/lib/format";
+import { advanceOrder, cancelOrder, createOrder, deleteOrder } from "@/lib/actions";
+import { canCancel, canDelete, fmtDate, fmtEta, fmtOrderId, isClosed, nextAction } from "@/lib/format";
 import { commentCount, fetchLenovoData } from "@/lib/queries";
 import type { BoxModel, Order } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
@@ -571,7 +571,7 @@ function MyOrders({
                     <span className="ml-2 text-ink-2">· chega {fmtEta(o.eta)}</span>
                   )}
                 </div>
-                {(action?.actor === "lenovo" || canCancel(o.status)) && (
+                {(action?.actor === "lenovo" || canCancel(o.status) || canDelete(o.status)) && (
                   <div className="mt-2 flex gap-2">
                     {action?.actor === "lenovo" && (
                       <button
@@ -592,6 +592,18 @@ function MyOrders({
                         }}
                       >
                         Cancelar
+                      </button>
+                    )}
+                    {canDelete(o.status) && (
+                      <button
+                        className={btn.smallDanger + " px-3 py-1.5 text-sm"}
+                        disabled={busy === o.id}
+                        onClick={() => {
+                          if (confirm(`Excluir o pedido ${fmtOrderId(o.id)}? Itens, histórico e comentários somem junto.`))
+                            void run(o.id, () => deleteOrder(o.id));
+                        }}
+                      >
+                        Excluir
                       </button>
                     )}
                   </div>
@@ -669,6 +681,19 @@ function MyOrders({
                             }}
                           >
                             Cancelar
+                          </button>
+                        )}
+                        {canDelete(o.status) && (
+                          <button
+                            className={btn.smallDanger}
+                            disabled={busy === o.id}
+                            title="Remove o pedido da lista (itens, histórico e comentários)"
+                            onClick={() => {
+                              if (confirm(`Excluir o pedido ${fmtOrderId(o.id)}? Itens, histórico e comentários somem junto.`))
+                                void run(o.id, () => deleteOrder(o.id));
+                            }}
+                          >
+                            Excluir
                           </button>
                         )}
                       </div>

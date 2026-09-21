@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { advanceOrder, restock } from "@/lib/actions";
-import { fmtDate, fmtEta, fmtOrderId, isClosed, localDateTimeValue, nextAction, timeAgo } from "@/lib/format";
+import { advanceOrder, deleteOrder, restock } from "@/lib/actions";
+import { canDelete, fmtDate, fmtEta, fmtOrderId, isClosed, localDateTimeValue, nextAction, timeAgo } from "@/lib/format";
 import { commentCount, fetchDhlData } from "@/lib/queries";
 import type { BoxModel, Order, OrderStatus } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
@@ -161,6 +161,16 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
     setDispatching(true);
   }
 
+  async function remove() {
+    if (!confirm(`Excluir o pedido ${fmtOrderId(o.id)}? Itens, histórico e comentários somem junto.`)) return;
+    setBusy(true);
+    setErr(null);
+    const r = await deleteOrder(o.id);
+    setBusy(false);
+    if (!r.ok) setErr(r.error);
+    onChanged();
+  }
+
   return (
     <div
       className={
@@ -204,6 +214,17 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
         )}
         {action?.actor === "lenovo" && (
           <span className="text-xs text-muted">Aguardando a Lenovo confirmar a entrega</span>
+        )}
+        {canDelete(o.status) && (
+          <button
+            className={btn.smallDanger}
+            disabled={busy}
+            onClick={() => void remove()}
+            type="button"
+            title="Remove o pedido do histórico (itens, eventos e comentários)"
+          >
+            {busy ? "Excluindo…" : "Excluir"}
+          </button>
         )}
       </div>
 
@@ -279,6 +300,18 @@ function StockTable({
   const [qty, setQty] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return boxes;
+    return boxes.filter(
+      (b) =>
+        b.serial.toLowerCase().includes(q) ||
+        b.machine_name.toLowerCase().includes(q) ||
+        b.machine_model.toLowerCase().includes(q),
+    );
+  }, [boxes, search]);
 
   async function doRestock(serial: string) {
     const n = Number.parseInt(qty[serial] ?? "", 10);
@@ -296,7 +329,19 @@ function StockTable({
   }
 
   return (
-    <Section title="Estoque do armazém" flush>
+    <Section
+      title="Estoque do armazém"
+      flush
+      right={
+        <input
+          className={input + " w-56"}
+          placeholder="Buscar serial ou máquina"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Buscar no estoque"
+        />
+      }
+    >
       {err && (
         <div className="p-4 pb-0">
           <ErrorBox message={err} onClose={() => setErr(null)} />
@@ -304,11 +349,13 @@ function StockTable({
       )}
       {loading ? (
         <Empty>Carregando…</Empty>
+      ) : filtered.length === 0 ? (
+        <Empty>Nenhuma caixa encontrada para “{search}”.</Empty>
       ) : (
         <>
         {/* Celular: lista com os quatro números e a reposição à mão. */}
         <ul className="divide-y divide-line md:hidden">
-          {boxes.map((b) => {
+          {filtered.map((b) => {
             const isLow = b.stock_available < b.min_stock;
             return (
               <li key={b.serial} className={"px-4 py-3 " + (b.active ? "" : "opacity-60")}>
@@ -374,7 +421,7 @@ function StockTable({
               </tr>
             </thead>
             <tbody>
-              {boxes.map((b) => {
+              {filtered.map((b) => {
                 const isLow = b.stock_available < b.min_stock;
                 return (
                   <tr key={b.serial} className={b.active ? "" : "opacity-60"}>

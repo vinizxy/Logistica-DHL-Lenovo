@@ -47,6 +47,9 @@ export function isClosed(status: OrderStatus): boolean {
   return status === "entregue" || status === "cancelado";
 }
 
+// Excluir só faz sentido depois de encerrado — em andamento, o caminho é cancelar.
+export const canDelete = isClosed;
+
 export function fmtOrderId(id: number): string {
   return "#" + String(id).padStart(4, "0");
 }

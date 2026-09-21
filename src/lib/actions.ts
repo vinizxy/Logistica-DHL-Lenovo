@@ -45,6 +45,13 @@ export async function cancelOrder(orderId: number): Promise<Result<null>> {
   return { ok: true, data: null };
 }
 
+// Só pedidos encerrados (entregue/cancelado); o banco recusa os demais.
+export async function deleteOrder(orderId: number): Promise<Result<null>> {
+  const { error } = await supabase.rpc("delete_order", { p_order_id: orderId });
+  if (error) return { ok: false, error: cleanMessage(error.message) };
+  return { ok: true, data: null };
+}
+
 export async function restock(serial: string, quantity: number): Promise<Result<number>> {
   const { data, error } = await supabase.rpc("restock", {
     p_serial: serial,

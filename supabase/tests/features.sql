@@ -1,12 +1,12 @@
 -- Testes de: cadastro de caixas, pedido urgente, previsão de entrega e comentários
--- (migração 0004). Mesmo esquema de rules.sql: rollback proposital no fim,
+-- (migração 0004) e exclusão de pedidos (0005). Mesmo esquema de rules.sql: rollback proposital no fim,
 -- relatório na mensagem de erro; sucesso = 0 falhas.
 create temp table test_results (seq serial, line text) on commit drop;
 create function pg_temp.ok(cond boolean, label text) returns void language sql as $$
   insert into test_results (line) values ((case when cond then 'ok     ' else 'FALHOU ' end) || label);
 $$;
 do $t$
-declare o bigint; s text; n integer; msg text; r public.orders%rowtype; c bigint;
+declare o bigint; s text; n integer; msg text; r public.orders%rowtype; c bigint; canc bigint;
 begin
   -- 1. cadastro
   s := public.create_box_model(null, 'Teste Máquina', 'v9', 50, 10);
@@ -29,6 +29,7 @@ begin
   exception when others then perform pg_temp.ok(sqlerrm like '%reservadas%', '3a descontinuar com reserva recusado: ' || sqlerrm); end;
   perform public.cancel_order(o);
   perform public.cancel_order(o - 1);
+  canc := o;
   perform public.update_box_model(s, 'Teste Máquina 2', 'v10', 20, false);
   perform pg_temp.ok((select active = false and machine_name = 'Teste Máquina 2' and min_stock = 20 from public.box_models where serial = s), '3b editar e descontinuar');
   begin perform public.create_order('Tester', null, json_build_array(json_build_object('serial', s, 'quantity', 1))::jsonb); perform pg_temp.ok(false, '3c pedir descontinuada');
@@ -52,6 +53,20 @@ begin
   exception when others then perform pg_temp.ok(true, '5b comentário vazio recusado'); end;
   begin perform public.add_comment(999999, 'dhl', 'Maria', 'x'); perform pg_temp.ok(false, '5c pedido inexistente');
   exception when others then perform pg_temp.ok(true, '5c pedido inexistente recusado'); end;
+  -- 6. exclusão (migração 0005)
+  begin perform public.delete_order(o); perform pg_temp.ok(false, '6a excluir em transporte');
+  exception when others then perform pg_temp.ok(sqlerrm like '%cancele antes%', '6a excluir em andamento recusado: ' || sqlerrm); end;
+  perform public.advance_order(o, 'lenovo');
+  perform public.delete_order(o);
+  perform pg_temp.ok(not exists (select 1 from public.orders where id = o), '6b pedido entregue excluído');
+  perform pg_temp.ok(not exists (select 1 from public.order_items where order_id = o)
+                 and not exists (select 1 from public.order_events where order_id = o)
+                 and not exists (select 1 from public.order_comments where order_id = o), '6c itens, eventos e comentários em cascata');
+  perform pg_temp.ok((select stock_total = 47 from public.box_models where serial = s), '6d estoque intocado');
+  perform public.delete_order(canc);
+  perform pg_temp.ok(not exists (select 1 from public.orders where id = canc), '6e pedido cancelado excluído');
+  begin perform public.delete_order(999999); perform pg_temp.ok(false, '6f inexistente');
+  exception when others then perform pg_temp.ok(true, '6f inexistente recusado'); end;
 
   select string_agg(line, E'\n' order by seq), count(*) filter (where line like 'FALHOU%') into msg, n from test_results;
   raise exception E'\n=== RELATÓRIO (rollback proposital) ===\n%\n=== % falhas ===', msg, n;
