@@ -54,10 +54,21 @@ Migrações em `supabase/migrations/`, na ordem:
 3. `0003_seed.sql` — 13 tipos de caixa e 5 pedidos de exemplo (criados via funções)
 4. `0004_urgent_eta_comments_catalog.sql` — pedido urgente, previsão de entrega, comentários, cadastro de caixas
 5. `0005_delete_order.sql` — `delete_order`: exclui só pedidos entregues/cancelados (em andamento, cancele antes)
+6. `0006_hardening.sql` — limites de tamanho/quantidade com mensagens legíveis, tetos de estoque, EXECUTE revogado das funções internas
 
-Testes das regras: `supabase/tests/rules.sql` (29 asserções) e `supabase/tests/features.sql` (20). Roda inteiro numa transação e termina com um
-`RAISE EXCEPTION` contendo o relatório — o banco fica intocado. Cole no SQL Editor do Supabase
-e leia o relatório na mensagem de erro; sucesso = `0 falhas`.
+Testes (todos com rollback proposital: rodam inteiros numa transação e terminam com um
+`RAISE EXCEPTION` contendo o relatório — o banco fica intocado; sucesso = `0 falhas`):
+
+- `supabase/tests/rules.sql` (43) — regras de estoque e fluxo de status
+- `supabase/tests/features.sql` (20) — urgente, previsão, comentários, cadastro, exclusão
+- `supabase/tests/security.sql` (45) — papel `anon` não escreve direto em tabela nenhuma; funções internas
+  sem EXECUTE; entradas hostis (20 mil caracteres, quantidades absurdas, HTML/SQL no texto, JSON
+  malformado) recusadas com mensagem legível; invariantes de estoque no banco inteiro
+- `supabase/tests/concurrency.mjs` (7) — pela API pública: 12 pedidos simultâneos brigando pelo mesmo
+  estoque, cliques paralelos em avançar/cancelar. Roda com
+  `node --dns-result-order=ipv4first supabase/tests/concurrency.mjs`; cria e remove os próprios dados.
+
+Cole os `.sql` no SQL Editor do Supabase e leia o relatório na mensagem de erro.
 
 ## Roteiro de demonstração
 
