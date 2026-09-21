@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback } from "react";
-import { ACTOR_LABEL, describeEvent, fmtDate, fmtOrderId } from "@/lib/format";
+import { useCallback, useState } from "react";
+import { advanceOrder } from "@/lib/actions";
+import { ACTOR_LABEL, describeEvent, fmtDate, fmtEta, fmtOrderId } from "@/lib/format";
 import { fetchOrder, fetchOrderComments, fetchOrderEvents } from "@/lib/queries";
 import type { OrderComment, OrderEvent } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
 import { Comments } from "@/components/Comments";
 import { Timeline } from "@/components/Timeline";
-import { ConnectionBanner, Empty, ErrorBox, Section, StatusBadge, UrgentBadge } from "@/components/ui";
+import { btn, ConnectionBanner, Empty, ErrorBox, Section, StatusBadge, UrgentBadge } from "@/components/ui";
 
 export default function OrderPage() {
   const params = useParams<{ id: string }>();
@@ -63,6 +64,8 @@ export default function OrderPage() {
 
       <ConnectionBanner connection={connection} />
 
+      {order.status === "em_transporte" && <ConfirmDelivery orderId={order.id} eta={order.eta} onChanged={refetch} />}
+
       <Section title="Andamento">
         <Timeline order={order} events={events} />
       </Section>
@@ -103,5 +106,47 @@ export default function OrderPage() {
 
       <Comments orderId={order.id} comments={comments} onChanged={refetch} />
     </>
+  );
+}
+
+/**
+ * Único passo que cabe à Lenovo no rastreio: fechar o ciclo quando as caixas chegam.
+ * Mesma função do painel (advance_order como "lenovo"); o banco valida o status.
+ */
+function ConfirmDelivery({
+  orderId,
+  eta,
+  onChanged,
+}: {
+  orderId: number;
+  eta: string | null;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function confirmDelivery() {
+    setBusy(true);
+    setErr(null);
+    const r = await advanceOrder(orderId, "lenovo");
+    setBusy(false);
+    if (!r.ok) setErr(r.error);
+    onChanged();
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border border-red/40 bg-red-soft/40 px-4 py-3">
+      <div>
+        <div className="text-sm font-medium">As caixas estão a caminho da Lenovo</div>
+        <div className="text-xs text-muted">
+          {eta ? <>Previsão de entrega: <span className="text-ink-2">{fmtEta(eta)}</span>. </> : null}
+          Quando chegarem, confirme aqui para encerrar o pedido.
+        </div>
+        {err && <div className="mt-1 text-xs text-red">{err}</div>}
+      </div>
+      <button className={btn.primary + " w-full sm:w-auto"} type="button" disabled={busy} onClick={() => void confirmDelivery()}>
+        {busy ? "Confirmando…" : "Confirmar entrega"}
+      </button>
+    </div>
   );
 }

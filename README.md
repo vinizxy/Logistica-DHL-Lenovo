@@ -15,7 +15,7 @@ pedido em tempo real.
 |---|---|---|
 | `/lenovo` | Linha de refurbish | Vê estoque disponível (com busca), monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados |
 | `/dhl` | Armazém | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com busca e alerta de mínimo, reposição, exclui pedidos do histórico |
-| `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários entre Lenovo e DHL |
+| `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários entre Lenovo e DHL; a Lenovo confirma a entrega por aqui também |
 | `/cadastro` | Admin | Catálogo de caixas: incluir modelo novo (serial gerado), editar nome/modelo/mínimo, descontinuar/reativar |
 
 ## Fluxo de um pedido
