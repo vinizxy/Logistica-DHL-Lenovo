@@ -1,4 +1,4 @@
-import type { Actor, OrderStatus } from "./types";
+import type { Actor, OrderStatus, Side } from "./types";
 
 // Fluxo principal, na ordem. "cancelado" fica fora porque é um desvio.
 export const STATUS_FLOW: OrderStatus[] = [
@@ -18,13 +18,13 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   cancelado: "Cancelado",
 };
 
-export const ACTOR_LABEL: Record<Actor, string> = { lenovo: "Lenovo", dhl: "DHL" };
+export const ACTOR_LABEL: Record<Actor, string> = { lenovo: "Lenovo", dhl: "DHL", admin: "Admin" };
 
 // Espelha a regra de advance_order no banco: qual é a única próxima ação e de quem é.
 // O banco continua sendo a autoridade; isto só decide qual botão mostrar.
 export function nextAction(
   status: OrderStatus,
-): { actor: Actor; next: OrderStatus; label: string } | null {
+): { actor: Side; next: OrderStatus; label: string } | null {
   switch (status) {
     case "enviado":
       return { actor: "dhl", next: "recebido", label: "Marcar como recebido" };

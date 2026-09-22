@@ -11,17 +11,20 @@ pedido em tempo real.
 
 ## Login e perfis
 
-Cada conta tem um perfil **Lenovo** ou **DHL** e só vê o próprio painel. O banco confere o
-perfil dentro de cada função: uma conta DHL não cria pedido nem pela API, uma conta Lenovo não
-repõe estoque. Sem login, a API não lê nem escreve nada.
+Cada conta tem um perfil **Lenovo**, **DHL** ou **Admin**. Lenovo e DHL só veem o próprio
+painel; o banco confere o perfil dentro de cada função: uma conta DHL não cria pedido nem pela
+API, uma conta Lenovo não repõe estoque. O admin controla tudo (os dois painéis, o catálogo) e
+gerencia contas em `/admin`. Sem login, a API não lê nem escreve nada.
 
 - `/login` — escolha o lado (logo Lenovo ou DHL), e-mail e senha. Conta do outro lado é recusada
   com aviso. Depois de entrar, cada perfil cai no seu painel e o outro redireciona.
-- Contas são criadas pelo administrador (sem cadastro público): `node --dns-result-order=ipv4first
-  supabase/scripts/create_test_users.mjs <email> <senha> <lenovo|dhl> "<nome>"` com a service
-  role no `.env.local`, ou em Authentication → Add user no painel do Supabase (com `role` e
-  `display_name` no user metadata). Outro domínio de e-mail sem `role` é recusado pelo banco.
-- Contas de teste: `teste123@lenovo.com` / `teste123@dhl.com`, senha `teste123`.
+- Contas são criadas pelo admin em `/admin` (sem cadastro público): criar, editar perfil/nome,
+  definir senha nova, excluir. As funções `admin_*` escrevem em `auth.users` no formato do
+  GoTrue, então não há service role no frontend. Alternativas: o script
+  `supabase/scripts/create_test_users.mjs` (service role no `.env.local`) ou Authentication →
+  Add user no painel do Supabase (com `role` e `display_name` no user metadata).
+- Contas de teste: `teste123@lenovo.com` / `teste123@dhl.com`, senha `teste123`;
+  admin `admin@lenovo.com`, senha `admin1234` — **troque em `/admin` antes de apresentar**.
 - Spec: [docs/specs/2026-09-21-login-design.md](docs/specs/2026-09-21-login-design.md).
 
 > Desligue **Authentication → Providers → Email → "Enable sign ups"** no painel do Supabase para
@@ -31,7 +34,8 @@ repõe estoque. Sem login, a API não lê nem escreve nada.
 
 | Rota | Perfil | O que faz |
 |---|---|---|
-| `/login` | — | Entrar como Lenovo ou DHL |
+| `/login` | — | Entrar como Lenovo ou DHL (o admin entra por qualquer um dos dois) |
+| `/admin` | Admin | Contas: criar, editar perfil/nome, nova senha, excluir |
 | `/lenovo` | Lenovo | Vê estoque disponível (com busca), monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados **da própria lista** (a DHL continua vendo) |
 | `/dhl` | DHL | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com busca e alerta de mínimo, reposição; histórico permanente |
 | `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários (assinados pelo perfil); a Lenovo confirma a entrega por aqui também |
@@ -75,6 +79,7 @@ Migrações em `supabase/migrations/`, na ordem:
 5. `0005_delete_order.sql` — `delete_order`: exclui só pedidos entregues/cancelados (em andamento, cancele antes)
 6. `0006_hardening.sql` — limites de tamanho/quantidade com mensagens legíveis, tetos de estoque, EXECUTE revogado das funções internas
 7. `0007_auth.sql` — perfis (`profiles`, trigger em `auth.users`), `require_role()` em toda função, `hide_order` no lugar de `delete_order`, leitura/EXECUTE só para `authenticated`, colunas de auditoria (`created_by`, `user_id`)
+8. `0008_admin.sql` — perfil `admin` (passa em qualquer checagem) e gestão de contas: `admin_list_users`, `admin_create_user`, `admin_update_user`, `admin_set_password`, `admin_delete_user`
 
 Testes (todos com rollback proposital: rodam inteiros numa transação e terminam com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado; sucesso = `0 falhas`):
@@ -84,6 +89,8 @@ precisam existir.
 
 - `supabase/tests/rules.sql` (29) — regras de estoque e fluxo de status
 - `supabase/tests/features.sql` (22) — urgente, previsão, comentários, cadastro, ocultação
+- `supabase/tests/admin.sql` (27) — só admin gerencia contas; ciclo criar → senha → perfil → excluir;
+  admin não apaga nem rebaixa a si mesmo; admin opera os dois lados; pedidos sobrevivem à exclusão da conta
 - `supabase/tests/security.sql` (62) — sem login nada lê nem escreve; logado não escreve direto em
   tabela; cada perfil só executa o que é dele (seção P); funções internas sem EXECUTE; entradas
   hostis recusadas com mensagem legível; invariantes de estoque no banco inteiro

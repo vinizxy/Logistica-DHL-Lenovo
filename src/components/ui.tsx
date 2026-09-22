@@ -49,9 +49,10 @@ export function Nav() {
         </Link>
         {/* Só o painel do perfil; o proxy barra o outro lado de qualquer jeito. */}
         <nav className="flex items-center">
-          {profile?.role === "lenovo" && link("/lenovo", "Lenovo")}
-          {profile?.role === "dhl" && link("/dhl", "DHL")}
-          {profile?.role === "dhl" && link("/cadastro", "Cadastro", false)}
+          {(profile?.role === "lenovo" || profile?.role === "admin") && link("/lenovo", "Lenovo")}
+          {(profile?.role === "dhl" || profile?.role === "admin") && link("/dhl", "DHL")}
+          {(profile?.role === "dhl" || profile?.role === "admin") && link("/cadastro", "Cadastro", false)}
+          {profile?.role === "admin" && link("/admin", "Admin", false)}
           {profile && (
             <>
               <span className="ml-3 hidden max-w-[12rem] truncate border-l border-line pl-3 text-sm text-ink-2 sm:inline" title={profile.display_name}>

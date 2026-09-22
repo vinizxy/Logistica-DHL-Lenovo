@@ -2,7 +2,7 @@
 // perfil de quem está logado (auth.uid()) e devolve mensagens em PT-BR prontas para a tela.
 
 import { supabase } from "./supabase";
-import type { OrderStatus, Result } from "./types";
+import type { Actor, OrderStatus, Result } from "./types";
 
 // Mensagem que o banco devolve quando a sessão não existe/expirou; o AuthProvider
 // escuta isso para mandar para /login.
@@ -113,4 +113,55 @@ export async function updateBoxModel(input: {
 // PostgREST às vezes prefixa com o código; a mensagem em si já vem legível do banco.
 function cleanMessage(msg: string): string {
   return msg.replace(/^(P0001|ERROR):?\s*/i, "").trim();
+}
+
+// ---- Admin: gestão de contas (funções admin_* exigem perfil admin) -------------------
+
+export interface AdminUser {
+  user_id: string;
+  email: string;
+  role: Actor;
+  display_name: string;
+  created_at: string;
+  last_sign_in_at: string | null;
+}
+
+export async function adminListUsers(): Promise<Result<AdminUser[]>> {
+  const { data, error } = await supabase.rpc("admin_list_users");
+  if (error) return { ok: false, error: cleanMessage(error.message) };
+  return { ok: true, data: (data ?? []) as AdminUser[] };
+}
+
+export async function adminCreateUser(input: {
+  email: string;
+  password: string;
+  role: Actor;
+  displayName: string;
+}): Promise<Result<string>> {
+  const { data, error } = await supabase.rpc("admin_create_user", {
+    p_email: input.email,
+    p_password: input.password,
+    p_role: input.role,
+    p_display_name: input.displayName,
+  });
+  if (error) return { ok: false, error: cleanMessage(error.message) };
+  return { ok: true, data: data as string };
+}
+
+export async function adminUpdateUser(userId: string, role: Actor, displayName: string): Promise<Result<null>> {
+  const { error } = await supabase.rpc("admin_update_user", { p_user_id: userId, p_role: role, p_display_name: displayName });
+  if (error) return { ok: false, error: cleanMessage(error.message) };
+  return { ok: true, data: null };
+}
+
+export async function adminSetPassword(userId: string, password: string): Promise<Result<null>> {
+  const { error } = await supabase.rpc("admin_set_password", { p_user_id: userId, p_password: password });
+  if (error) return { ok: false, error: cleanMessage(error.message) };
+  return { ok: true, data: null };
+}
+
+export async function adminDeleteUser(userId: string): Promise<Result<null>> {
+  const { error } = await supabase.rpc("admin_delete_user", { p_user_id: userId });
+  if (error) return { ok: false, error: cleanMessage(error.message) };
+  return { ok: true, data: null };
 }

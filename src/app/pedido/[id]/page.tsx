@@ -66,7 +66,7 @@ export default function OrderPage() {
 
       <ConnectionBanner connection={connection} />
 
-      {order.status === "em_transporte" && profile?.role === "lenovo" && (
+      {order.status === "em_transporte" && (profile?.role === "lenovo" || profile?.role === "admin") && (
         <ConfirmDelivery orderId={order.id} eta={order.eta} onChanged={refetch} />
       )}
 

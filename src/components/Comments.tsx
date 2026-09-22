@@ -55,7 +55,11 @@ export function Comments({
               <div
                 className={
                   "max-w-[85%] border px-3 py-2 text-sm " +
-                  (c.actor === "dhl" ? "border-line bg-surface-2" : "border-red/40 bg-red-soft/40")
+                  (c.actor === "dhl"
+                    ? "border-line bg-surface-2"
+                    : c.actor === "admin"
+                      ? "border-amber/40 bg-surface-2"
+                      : "border-red/40 bg-red-soft/40")
                 }
               >
                 <div className="mb-0.5 flex items-baseline gap-2 text-xs">

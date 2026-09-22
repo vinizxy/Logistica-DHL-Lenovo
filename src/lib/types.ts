@@ -8,7 +8,10 @@ export type OrderStatus =
   | "entregue"
   | "cancelado";
 
-export type Actor = "lenovo" | "dhl";
+// Quem age: os dois lados e o admin (que controla tudo).
+export type Actor = "lenovo" | "dhl" | "admin";
+// Os dois lados do processo (a tela de login e os botões só falam deles).
+export type Side = Exclude<Actor, "admin">;
 
 export interface BoxModel {
   serial: string;

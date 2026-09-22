@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { fetchProfile, HOME } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import type { Actor } from "@/lib/types";
+import type { Side } from "@/lib/types";
 import { btn, input } from "@/components/ui";
 
-const SIDE_LABEL: Record<Actor, string> = { lenovo: "Lenovo", dhl: "DHL" };
+const SIDE_LABEL: Record<Side, string> = { lenovo: "Lenovo", dhl: "DHL" };
 
 export default function LoginPage() {
   return (
@@ -21,7 +21,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [side, setSide] = useState<Actor | null>(null);
+  const [side, setSide] = useState<Side | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,7 +55,8 @@ function LoginForm() {
       setErr("Conta sem perfil. Fale com o administrador.");
       return;
     }
-    if (profile.role !== side) {
+    // Admin entra por qualquer um dos dois lados e vai para o painel dele.
+    if (profile.role !== "admin" && profile.role !== side) {
       // Entrou, mas pelo lado errado: desfaz e sugere o lado certo.
       await supabase.auth.signOut();
       setBusy(false);
@@ -80,7 +81,10 @@ function LoginForm() {
             <Image src="/lenovo-logo.png" alt="Lenovo" width={389} height={129} priority className="h-10 w-auto" />
           </SideCard>
           <SideCard active={side === "dhl"} onClick={() => setSide("dhl")} label="DHL">
-            <DhlMark />
+            {/* Logo em public/dhl-logo.png, sobre o amarelo da marca. */}
+            <span className="flex h-10 items-center bg-[#FFCC00] px-3">
+              <Image src="/dhl-logo.png" alt="DHL" width={1963} height={283} priority className="h-5 w-auto" />
+            </span>
           </SideCard>
         </div>
 
@@ -149,20 +153,5 @@ function SideCard({
     >
       {children}
     </button>
-  );
-}
-
-/**
- * Placeholder até o logo oficial chegar em public/dhl-logo.png (marca registrada;
- * não baixar da web). Mesma altura do logo Lenovo, nas cores da marca.
- */
-function DhlMark() {
-  return (
-    <span
-      className="flex h-10 items-center bg-[#FFCC00] px-4 text-2xl font-black italic tracking-tight text-[#D40511]"
-      aria-hidden
-    >
-      DHL
-    </span>
   );
 }

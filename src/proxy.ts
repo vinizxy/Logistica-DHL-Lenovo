@@ -4,9 +4,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { HOME } from "@/lib/auth";
-import type { Actor } from "@/lib/types";
+import type { Actor, Side } from "@/lib/types";
 
-const ROLE_ONLY: Record<string, Actor> = { "/lenovo": "lenovo", "/dhl": "dhl", "/cadastro": "dhl" };
+// Rotas de um lado só. Admin passa em todas; /admin é só dele.
+const ROLE_ONLY: Record<string, Side> = { "/lenovo": "lenovo", "/dhl": "dhl", "/cadastro": "dhl" };
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -55,6 +56,10 @@ export async function proxy(request: NextRequest) {
   const role = profile.role as Actor;
 
   if (isLogin || pathname === "/") return redirect(HOME[role]);
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    return role === "admin" ? response : redirect(HOME[role]);
+  }
+  if (role === "admin") return response;
   const only = Object.entries(ROLE_ONLY).find(([p]) => pathname === p || pathname.startsWith(p + "/"))?.[1];
   if (only && only !== role) return redirect(HOME[role]);
   return response;

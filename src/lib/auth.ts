@@ -7,7 +7,7 @@ export interface Profile {
   display_name: string;
 }
 
-export const HOME: Record<Actor, string> = { lenovo: "/lenovo", dhl: "/dhl" };
+export const HOME: Record<Actor, string> = { lenovo: "/lenovo", dhl: "/dhl", admin: "/admin" };
 
 export async function fetchProfile(client: SupabaseClient, userId: string): Promise<Profile | null> {
   const { data } = await client
