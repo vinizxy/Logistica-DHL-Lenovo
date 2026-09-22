@@ -74,7 +74,7 @@ begin
   perform pg_temp.ok(s ~ '^[A-Z0-9]{10}$', 'D1 admin cadastra caixa');
   perform public.advance_order(o); perform public.advance_order(o); perform public.advance_order(o); perform public.advance_order(o);
   perform pg_temp.ok((select status = 'entregue' from public.orders where id = o), 'D2 admin leva o pedido do início ao fim');
-  perform pg_temp.ok((select count(*) filter (where actor = 'admin') = 4 and count(*) filter (where user_id = me) = 4 from public.order_events where order_id = o), 'D3 eventos do admin gravados como admin, com user_id');
+  perform pg_temp.ok((select count(*) filter (where actor = 'admin') = 4 and count(*) filter (where user_id = me) = 4 and count(*) filter (where actor = 'lenovo' and user_id = u) = 1 from public.order_events where order_id = o), 'D3 eventos: criação como lenovo (conta nova), 4 avanços como admin, todos com user_id');
   perform public.hide_order(o);
   perform pg_temp.ok((select hidden_by_lenovo from public.orders where id = o), 'D4 admin oculta pedido');
   n := public.restock(s, 5);

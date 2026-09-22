@@ -126,6 +126,129 @@ begin
 end;
 $$;
 
+-- create_order/cancel_order: o evento registra o perfil de quem fez (admin aparece como admin).
+create or replace function public.create_order(
+  p_requested_by text,
+  p_notes text,
+  p_items jsonb,
+  p_urgent boolean default false
+)
+returns bigint
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_me       public.profiles%rowtype;
+  v_order_id bigint;
+  v_item     record;
+  v_box      public.box_models%rowtype;
+  v_dupes    integer;
+  v_by       text;
+  v_notes    text;
+begin
+  v_me := public.require_role('lenovo');
+  v_by := public.check_text(p_requested_by, 'Informe o nome do solicitante.', 'Nome do solicitante', 80);
+  v_notes := nullif(btrim(p_notes), '');
+  if length(v_notes) > 500 then
+    raise exception 'A observação é muito longa (máx. 500 caracteres).';
+  end if;
+
+  if p_items is null or jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'O pedido precisa ter pelo menos um item.';
+  end if;
+  if jsonb_array_length(p_items) > 100 then
+    raise exception 'Um pedido pode ter no máximo 100 tipos de caixa.';
+  end if;
+  if exists (select 1 from jsonb_array_elements(p_items) i where jsonb_typeof(i) <> 'object') then
+    raise exception 'Item de pedido malformado.';
+  end if;
+
+  select count(*) - count(distinct i->>'serial')
+    into v_dupes
+    from jsonb_array_elements(p_items) i;
+  if v_dupes > 0 then
+    raise exception 'Há caixa repetida no pedido. Junte as quantidades em um item só.';
+  end if;
+
+  insert into public.orders (requested_by, notes, urgent, created_by)
+  values (v_by, v_notes, coalesce(p_urgent, false), v_me.user_id)
+  returning id into v_order_id;
+
+  -- Trava as linhas em ordem de serial: dois pedidos simultâneos nunca entram em deadlock.
+  for v_item in
+    select i->>'serial' as serial,
+           case when (i->>'quantity') ~ '^\d{1,9}$' then (i->>'quantity')::integer end as quantity
+      from jsonb_array_elements(p_items) i
+     order by 1
+  loop
+    if v_item.quantity is null or v_item.quantity <= 0 then
+      raise exception 'Quantidade inválida para a caixa %.', coalesce(v_item.serial, '(sem serial)');
+    end if;
+    if v_item.quantity > 10000 then
+      raise exception 'Quantidade acima do limite (10.000) para a caixa %.', v_item.serial;
+    end if;
+
+    select * into v_box from public.box_models where serial = v_item.serial for update;
+    if not found then
+      raise exception 'Caixa % não existe no catálogo.', v_item.serial;
+    end if;
+    if not v_box.active then
+      raise exception '% %: caixa descontinuada, não pode ser pedida.', v_box.machine_name, v_box.machine_model;
+    end if;
+    if v_item.quantity > v_box.stock_available then
+      raise exception '% %: só % disponíveis, você pediu %.',
+        v_box.machine_name, v_box.machine_model, v_box.stock_available, v_item.quantity;
+    end if;
+
+    update public.box_models set stock_reserved = stock_reserved + v_item.quantity
+     where serial = v_item.serial;
+    insert into public.order_items (order_id, serial, quantity)
+    values (v_order_id, v_item.serial, v_item.quantity);
+  end loop;
+
+  insert into public.order_events (order_id, from_status, to_status, actor, user_id)
+  values (v_order_id, null, 'enviado', v_me.role, v_me.user_id);
+
+  return v_order_id;
+end;
+$$;
+
+create or replace function public.cancel_order(p_order_id bigint)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_me    public.profiles%rowtype;
+  v_order public.orders%rowtype;
+  v_item  record;
+begin
+  v_me := public.require_role('lenovo');
+
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    raise exception 'Pedido #% não encontrado.', p_order_id;
+  end if;
+  if v_order.status not in ('enviado', 'recebido') then
+    raise exception 'Pedido #% está "%" e não pode mais ser cancelado.',
+      p_order_id, public.status_label(v_order.status);
+  end if;
+
+  for v_item in
+    select serial, quantity from public.order_items where order_id = p_order_id order by serial
+  loop
+    update public.box_models set stock_reserved = stock_reserved - v_item.quantity
+     where serial = v_item.serial;
+  end loop;
+
+  update public.orders set status = 'cancelado' where id = p_order_id;
+  insert into public.order_events (order_id, from_status, to_status, actor, user_id)
+  values (p_order_id, v_order.status, 'cancelado', v_me.role, v_me.user_id);
+end;
+$$;
+
 -- 3. Gestão de contas (só admin) --------------------------------------------------------
 
 -- Lista de contas com perfil e último acesso.

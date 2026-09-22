@@ -15,6 +15,7 @@ export const KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const TEST_USERS = {
   lenovo: { email: "teste123@lenovo.com", password: env.TEST_LENOVO_PASSWORD ?? "teste123" },
   dhl: { email: "teste123@dhl.com", password: env.TEST_DHL_PASSWORD ?? "teste123" },
+  admin: { email: "admin@lenovo.com", password: env.TEST_ADMIN_PASSWORD ?? "admin1234" },
 };
 
 export async function fetchRetry(url, init, tries = 4) {
@@ -40,14 +41,27 @@ async function parse(r) {
 /** Login por senha; devolve o access_token (ou lança). */
 export async function login(who) {
   const u = TEST_USERS[who];
+  const t = await loginAs(u.email, u.password);
+  if (!t.ok) throw new Error(`login ${who}: ${t.status} ${t.error}`);
+  return t.token;
+}
+
+/** Login por e-mail/senha sem lançar: { ok, token, status, error }. */
+export async function loginAs(email, password) {
   const r = await fetchRetry(`${URL_}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: headers(),
-    body: JSON.stringify({ email: u.email, password: u.password }),
+    body: JSON.stringify({ email, password }),
   });
   const j = await parse(r);
-  if (!r.ok || !j.access_token) throw new Error(`login ${who}: ${r.status} ${JSON.stringify(j).slice(0, 200)}`);
-  return j.access_token;
+  if (!r.ok || !j.access_token) return { ok: false, status: r.status, error: j.error_description ?? j.msg ?? j.error ?? JSON.stringify(j).slice(0, 120) };
+  return { ok: true, token: j.access_token, status: r.status, user: j.user };
+}
+
+/** GET /auth/v1/user com o token: quem sou eu (ou 401 se a sessão não vale). */
+export async function whoami(token) {
+  const r = await fetchRetry(`${URL_}/auth/v1/user`, { headers: headers(token) });
+  return { ok: r.ok, status: r.status, data: await parse(r) };
 }
 
 /** Chama uma função SQL via PostgREST. `token` nulo = sem sessão (anon). */

@@ -89,6 +89,11 @@ precisam existir.
 
 - `supabase/tests/rules.sql` (29) — regras de estoque e fluxo de status
 - `supabase/tests/features.sql` (22) — urgente, previsão, comentários, cadastro, ocultação
+- `supabase/tests/admin_api.mjs` (76) — pela API, com login real: admin cria conta de cada perfil e
+  loga com cada uma; validações; senha trocada (antiga falha, nova entra); perfil trocado muda as
+  permissões na hora; estoque pelo admin (cadastrar, repor, mínimo, descontinuar, limites); conta
+  excluída não loga, sessão cai, pedidos ficam; segundo admin. Roda com
+  `node --dns-result-order=ipv4first supabase/tests/admin_api.mjs`
 - `supabase/tests/admin.sql` (27) — só admin gerencia contas; ciclo criar → senha → perfil → excluir;
   admin não apaga nem rebaixa a si mesmo; admin opera os dois lados; pedidos sobrevivem à exclusão da conta
 - `supabase/tests/security.sql` (62) — sem login nada lê nem escreve; logado não escreve direto em

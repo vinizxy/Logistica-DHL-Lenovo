@@ -27,9 +27,16 @@ export async function proxy(request: NextRequest) {
   );
 
   // getUser() valida o token no servidor (getSession só lê o cookie).
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
   const isLogin = pathname === "/login";
+
+  // Falha de rede/servidor ao validar (não é "sem sessão"): deixa passar sem redirecionar.
+  // Um redirect aqui seria cacheado pelo prefetch do router e mandaria a pessoa para a
+  // página errada; a própria página lida com a sessão (AuthProvider).
+  if (!user && error && error.status !== 401 && error.status !== 403 && !/session/i.test(error.message)) {
+    return response;
+  }
 
   const redirect = (to: string) => {
     const url = request.nextUrl.clone();
