@@ -111,6 +111,34 @@ export async function updateBoxModel(input: {
   return { ok: true, data: null };
 }
 
+// Cushion nasce já com as máquinas em que serve (seriais das caixas delas).
+export async function createCushion(input: {
+  serial: string;
+  name: string;
+  model: string;
+  stockTotal: number;
+  minStock: number;
+  machines: string[];
+}): Promise<Result<string>> {
+  const { data, error } = await supabase.rpc("create_cushion", {
+    p_serial: input.serial,
+    p_name: input.name,
+    p_model: input.model,
+    p_stock_total: input.stockTotal,
+    p_min_stock: input.minStock,
+    p_box_serials: input.machines,
+  });
+  if (error) return { ok: false, error: cleanMessage(error) };
+  return { ok: true, data: data as string };
+}
+
+// Troca a lista inteira de máquinas do cushion.
+export async function setCushionFits(serial: string, machines: string[]): Promise<Result<number>> {
+  const { data, error } = await supabase.rpc("set_cushion_fits", { p_serial: serial, p_box_serials: machines });
+  if (error) return { ok: false, error: cleanMessage(error) };
+  return { ok: true, data: data as number };
+}
+
 // Só mostra na tela as mensagens que as funções levantam de propósito (RAISE EXCEPTION =
 // SQLSTATE P0001). Qualquer outro erro do banco fica no console, não na tela.
 function cleanMessage(error: { code?: string; message: string }): string {

@@ -13,8 +13,14 @@ export type Actor = "lenovo" | "dhl" | "admin";
 // Os dois lados do processo (a tela de login e os botões só falam deles).
 export type Side = Exclude<Actor, "admin">;
 
+// Item do catálogo: caixa ou cushion (acessório que protege a máquina dentro da caixa).
+export type ItemKind = "caixa" | "cushion";
+
+// Uma linha do catálogo. Para cushion, machine_name é o nome do cushion e
+// machine_model o modelo dele; as máquinas em que serve ficam em CushionFit.
 export interface BoxModel {
   serial: string;
+  kind: ItemKind;
   machine_name: string;
   machine_model: string;
   stock_total: number;
@@ -25,11 +31,17 @@ export interface BoxModel {
   updated_at: string;
 }
 
+// Cushion ↔ máquina (representada pela caixa dela no catálogo).
+export interface CushionFit {
+  cushion_serial: string;
+  box_serial: string;
+}
+
 export interface OrderItem {
   order_id: number;
   serial: string;
   quantity: number;
-  box_models: Pick<BoxModel, "machine_name" | "machine_model"> | null;
+  box_models: Pick<BoxModel, "machine_name" | "machine_model" | "kind"> | null;
 }
 
 export interface Order {
