@@ -7,7 +7,8 @@
 //   node --dns-result-order=ipv4first supabase/scripts/create_test_users.mjs
 //   node ... create_test_users.mjs maria@lenovo.com "senha forte" lenovo "Maria Silva"
 //
-// Sem argumentos, cria as duas contas de teste (teste123@lenovo.com / teste123@dhl.com).
+// Sem argumentos, cria as duas contas de teste (teste123@lenovo.com / teste123@dhl.com) com as
+// senhas TEST_LENOVO_PASSWORD e TEST_DHL_PASSWORD do .env.local.
 
 import { readFileSync } from "node:fs";
 
@@ -25,9 +26,10 @@ if (!URL_ || !SERVICE) {
 }
 const headers = { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, "Content-Type": "application/json" };
 
+// Senhas das contas de teste só pelo .env.local (o repositório é público).
 const DEFAULTS = [
-  ["teste123@lenovo.com", "teste123", "lenovo", "Lenovo Teste"],
-  ["teste123@dhl.com", "teste123", "dhl", "DHL Teste"],
+  ["teste123@lenovo.com", env.TEST_LENOVO_PASSWORD, "lenovo", "Lenovo Teste"],
+  ["teste123@dhl.com", env.TEST_DHL_PASSWORD, "dhl", "DHL Teste"],
 ];
 const [, , email, password, role, ...nameParts] = process.argv;
 const users = email ? [[email, password, role, nameParts.join(" ")]] : DEFAULTS;

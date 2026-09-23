@@ -12,10 +12,19 @@ const env = Object.fromEntries(
 );
 export const URL_ = env.NEXT_PUBLIC_SUPABASE_URL;
 export const KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Senhas só pelo .env.local (o repositório é público): TEST_LENOVO_PASSWORD,
+// TEST_DHL_PASSWORD, TEST_ADMIN_PASSWORD.
+function required(name) {
+  if (!env[name]) {
+    console.error(`Falta ${name} no .env.local (senha da conta de teste; nunca no git).`);
+    process.exit(1);
+  }
+  return env[name];
+}
 export const TEST_USERS = {
-  lenovo: { email: "teste123@lenovo.com", password: env.TEST_LENOVO_PASSWORD ?? "teste123" },
-  dhl: { email: "teste123@dhl.com", password: env.TEST_DHL_PASSWORD ?? "teste123" },
-  admin: { email: "admin@lenovo.com", password: env.TEST_ADMIN_PASSWORD ?? "admin1234" },
+  lenovo: { email: "teste123@lenovo.com", password: required("TEST_LENOVO_PASSWORD") },
+  dhl: { email: "teste123@dhl.com", password: required("TEST_DHL_PASSWORD") },
+  admin: { email: "admin@lenovo.com", password: required("TEST_ADMIN_PASSWORD") },
 };
 
 export async function fetchRetry(url, init, tries = 4) {

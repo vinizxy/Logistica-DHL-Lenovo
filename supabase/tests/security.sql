@@ -114,12 +114,17 @@ begin
     values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'intruso@gmail.com', 'x', now(), '{"provider":"email"}', '{"role":"admin"}', now(), now());
     perform pg_temp.ok(false, 'P17 cadastro @gmail com role=admin no user metadata criado');
   exception when others then perform pg_temp.ok(sqlerrm like '%sem perfil%', 'P17 cadastro @gmail pedindo admin recusado'); end;
-  declare v_u uuid := gen_random_uuid();
+  -- autocadastro fechado: nem o domínio da empresa dá perfil; só conta criada pelo servidor
   begin
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-    values (v_u, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'intruso@dhl.com', 'x', now(), '{"provider":"email"}', '{"role":"admin"}', now(), now());
-    perform pg_temp.ok((select role = 'dhl' from public.profiles where user_id = v_u), 'P18 cadastro @dhl pedindo admin vira dhl, não admin');
-  end;
+    values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'intruso@dhl.com', 'x', now(), '{"provider":"email"}', '{"role":"admin"}', now(), now());
+    perform pg_temp.ok(false, 'P18 autocadastro @dhl pedindo admin criado');
+  exception when others then perform pg_temp.ok(sqlerrm like '%sem perfil%', 'P18 autocadastro @dhl pedindo admin recusado'); end;
+  begin
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'qualquer@lenovo.com', 'x', now(), '{"provider":"email"}', '{}', now(), now());
+    perform pg_temp.ok(false, 'P18b autocadastro @lenovo.com criado');
+  exception when others then perform pg_temp.ok(sqlerrm like '%sem perfil%', 'P18b autocadastro @lenovo.com recusado'); end;
   declare v_u uuid := gen_random_uuid();
   begin
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)

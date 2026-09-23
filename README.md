@@ -27,11 +27,12 @@ gerencia contas em `/admin`. Sem login, a API não lê nem escreve nada.
   GoTrue, então não há service role no frontend. Alternativas: o script
   `supabase/scripts/create_test_users.mjs` (service role no `.env.local`) ou Authentication →
   Add user no painel do Supabase (com `role` no **app** metadata e `display_name` no user metadata).
-- O perfil de uma conta nova vem só de `raw_app_meta_data` (que apenas o servidor grava); sem ele,
-  vale o domínio do e-mail (`@lenovo.com` / `@dhl.com`), que nunca dá admin. O `role` que o
-  cliente manda no cadastro é ignorado.
+- O perfil de uma conta nova vem só de `raw_app_meta_data` (que apenas o servidor grava). Sem
+  ele a conta é recusada — nem o domínio do e-mail basta —, então ninguém se cadastra sozinho,
+  mesmo que o cadastro público do Supabase esteja ligado. O `role` que o cliente manda é ignorado.
 - Contas de teste: `teste123@lenovo.com` / `teste123@dhl.com` e um admin. As senhas não ficam
-  neste repositório (ele é público); peça ao administrador.
+  neste repositório (ele é público): os testes e o script leem `TEST_LENOVO_PASSWORD`,
+  `TEST_DHL_PASSWORD` e `TEST_ADMIN_PASSWORD` do `.env.local`.
 - Spec: [docs/specs/2026-09-21-login-design.md](docs/specs/2026-09-21-login-design.md).
 
 > Desligue **Authentication → Providers → Email → "Enable sign ups"** no painel do Supabase para
@@ -91,6 +92,7 @@ Migrações em `supabase/migrations/`, na ordem:
 9. `0009_signup_role_fix.sql` — correção de segurança: o perfil de conta nova vem de `raw_app_meta_data`, não do user metadata que o cliente controla (antes, o cadastro público podia criar admin)
 10. `0010_cushion.sql` — cushion no mesmo catálogo (`box_models.kind`), tabela `cushion_fits` (em quais máquinas cada cushion serve), `create_cushion` e `set_cushion_fits` (só DHL); reserva/baixa/cancelamento/reposição seguem nas funções existentes
 11. `0011_cushion_serial_only.sql` — cushion identificado só pelo serial (obrigatório): `create_cushion(serial, estoque, mínimo, máquinas)`; nome/modelo ficam derivados (`Cushion` + serial) e a edição de cushion só muda mínimo e situação
+12. `0012_signup_closed.sql` — autocadastro fechado: conta sem papel em `raw_app_meta_data` é recusada (antes, o domínio `@lenovo.com`/`@dhl.com` bastava)
 
 Testes (todos com rollback proposital: rodam inteiros numa transação e terminam com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado; sucesso = `0 falhas`):
@@ -109,7 +111,7 @@ precisam existir.
   admin não apaga nem rebaixa a si mesmo; admin opera os dois lados; pedidos sobrevivem à exclusão da conta
 - `supabase/tests/cushion.sql` (29) — cadastro de cushion pelo serial com máquinas, troca e recusas da lista,
   perfis, pedido misto caixa + cushion (reserva, baixa no despacho, cancelamento, reposição)
-- `supabase/tests/security.sql` (64) — sem login nada lê nem escreve; logado não escreve direto em
+- `supabase/tests/security.sql` (65) — sem login nada lê nem escreve; logado não escreve direto em
   tabela; cada perfil só executa o que é dele (seção P); funções internas sem EXECUTE; entradas
   hostis recusadas com mensagem legível; invariantes de estoque no banco inteiro
 - `supabase/tests/concurrency.mjs` (19) — pela API, com login: acesso por perfil, 12 pedidos

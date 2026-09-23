@@ -369,7 +369,9 @@ function StockTable({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <KindTag kind={b.kind} small />
-                    {!b.active && <span className="ml-2 text-xs text-muted">descontinuado</span>}
+                    {!b.active && (
+                      <span className="ml-2 text-xs text-muted">{b.kind === "caixa" ? "descontinuada" : "descontinuado"}</span>
+                    )}
                     <ItemTitle item={b} />
                     {b.kind === "cushion" ? (
                       <FitsLine machines={machinesOf(b.serial)} hits={hits} />
@@ -444,7 +446,9 @@ function StockTable({
                       ) : (
                         <div className="whitespace-nowrap font-medium">{b.machine_name}</div>
                       )}
-                      {!b.active && <span className="text-xs text-muted">descontinuado</span>}
+                      {!b.active && (
+                        <span className="text-xs text-muted">{b.kind === "caixa" ? "descontinuada" : "descontinuado"}</span>
+                      )}
                     </td>
                     <td className="text-ink-2">{b.kind === "cushion" ? <span className="text-muted">—</span> : b.machine_model}</td>
                     <td className="num text-ink-2">{b.stock_total}</td>
