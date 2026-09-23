@@ -108,7 +108,7 @@ precisam existir.
   admin não apaga nem rebaixa a si mesmo; admin opera os dois lados; pedidos sobrevivem à exclusão da conta
 - `supabase/tests/cushion.sql` (22) — cadastro de cushion com máquinas, troca e recusas da lista,
   perfis, pedido misto caixa + cushion (reserva, baixa no despacho, cancelamento, reposição)
-- `supabase/tests/security.sql` (65) — sem login nada lê nem escreve; logado não escreve direto em
+- `supabase/tests/security.sql` (64) — sem login nada lê nem escreve; logado não escreve direto em
   tabela; cada perfil só executa o que é dele (seção P); funções internas sem EXECUTE; entradas
   hostis recusadas com mensagem legível; invariantes de estoque no banco inteiro
 - `supabase/tests/concurrency.mjs` (19) — pela API, com login: acesso por perfil, 12 pedidos
@@ -117,6 +117,28 @@ precisam existir.
   teste ficam encerrados e ocultos da Lenovo (o `reset_demo.sql` limpa).
 
 Cole os `.sql` no SQL Editor do Supabase e leia o relatório na mensagem de erro.
+
+### Testes locais, sem tocar o Supabase
+
+```bash
+npm run test:db
+```
+
+Sobe um Postgres em memória ([PGlite](https://pglite.dev)) que imita o Supabase (schema `auth`,
+`auth.uid()`, papéis `anon`/`authenticated`), aplica todas as migrações, cria as contas de teste e:
+
+- roda todos os `.sql` de `supabase/tests/`, cada um num banco novo
+  (`node supabase/tests/local/run-sql.mjs [arquivo.sql]`);
+- roda a **simulação de estoque** (`supabase/tests/local/stock-sim.mjs [semente] [passos]`):
+  centenas de operações aleatórias pelas funções do banco — pedidos mistos de caixa e cushion,
+  pedidos acima do disponível, avançar, despachar, entregar, cancelar (inclusive fora de hora),
+  repor (inclusive quantidade inválida) e ações com o perfil errado. Depois de cada passo
+  compara total, reservado e disponível de cada item com um modelo calculado à parte, e confere
+  no banco inteiro que o reservado é a soma dos pedidos abertos. A mesma semente repete a mesma
+  sequência, então uma falha é reproduzível.
+
+O PGlite tem uma conexão só: concorrência de verdade continua coberta pelo `concurrency.mjs`
+contra a API.
 
 ## Roteiro de demonstração
 
