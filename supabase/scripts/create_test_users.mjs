@@ -1,7 +1,7 @@
 // Cria (ou atualiza) as contas do sistema pela API admin do Supabase.
 // Precisa de SUPABASE_SERVICE_ROLE_KEY no .env.local (nunca no frontend nem no git).
-// O perfil (lenovo|dhl) e o nome vão no user metadata; o trigger handle_new_user cria a
-// linha em public.profiles. Contas nascem com e-mail confirmado.
+// O perfil (lenovo|dhl) vai no app metadata (só o servidor grava) e o nome no user metadata;
+// o trigger handle_new_user cria a linha em public.profiles. Contas nascem com e-mail confirmado.
 //
 // Uso:
 //   node --dns-result-order=ipv4first supabase/scripts/create_test_users.mjs
@@ -37,7 +37,7 @@ for (const [email, password, role, display_name] of users) {
     console.error(`uso: <email> <senha> <lenovo|dhl> <nome de exibição>  (recebido: ${email} ${role} "${display_name}")`);
     process.exit(1);
   }
-  const body = { email, password, email_confirm: true, user_metadata: { role, display_name } };
+  const body = { email, password, email_confirm: true, app_metadata: { role }, user_metadata: { role, display_name } };
   // existe? → atualiza (senha/metadata). Não? → cria.
   const list = await fetch(`${URL_}/auth/v1/admin/users?page=1&per_page=1000`, { headers }).then((r) => r.json());
   const existing = list.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());

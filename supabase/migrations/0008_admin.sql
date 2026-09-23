@@ -2,8 +2,8 @@
 -- Contas são criadas/apagadas por funções SQL security definer que escrevem em auth.users
 -- (mesmo formato que o GoTrue usa), então não precisa de service role no frontend.
 
--- 1. Enum (precisa estar commitado antes de ser usado; por isso foi aplicado à parte)
--- alter type public.actor_role add value if not exists 'admin';
+-- 1. Enum: o valor 'admin' é adicionado em 0007b_admin_role_enum.sql (precisa estar
+--    commitado antes de ser usado aqui).
 
 -- 2. require_role: admin passa em qualquer checagem ---------------------------------
 create or replace function public.require_role(p_expected public.actor_role default null)

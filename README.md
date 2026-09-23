@@ -22,13 +22,16 @@ gerencia contas em `/admin`. Sem login, a API não lê nem escreve nada.
   definir senha nova, excluir. As funções `admin_*` escrevem em `auth.users` no formato do
   GoTrue, então não há service role no frontend. Alternativas: o script
   `supabase/scripts/create_test_users.mjs` (service role no `.env.local`) ou Authentication →
-  Add user no painel do Supabase (com `role` e `display_name` no user metadata).
-- Contas de teste: `teste123@lenovo.com` / `teste123@dhl.com`, senha `teste123`;
-  admin `admin@lenovo.com`, senha `admin1234` — **troque em `/admin` antes de apresentar**.
+  Add user no painel do Supabase (com `role` no **app** metadata e `display_name` no user metadata).
+- O perfil de uma conta nova vem só de `raw_app_meta_data` (que apenas o servidor grava); sem ele,
+  vale o domínio do e-mail (`@lenovo.com` / `@dhl.com`), que nunca dá admin. O `role` que o
+  cliente manda no cadastro é ignorado.
+- Contas de teste: `teste123@lenovo.com` / `teste123@dhl.com` e um admin. As senhas não ficam
+  neste repositório (ele é público); peça ao administrador.
 - Spec: [docs/specs/2026-09-21-login-design.md](docs/specs/2026-09-21-login-design.md).
 
 > Desligue **Authentication → Providers → Email → "Enable sign ups"** no painel do Supabase para
-> fechar o cadastro público de vez (o trigger já restringe a `@lenovo.com` / `@dhl.com`).
+> fechar o cadastro público de vez. Não há cadastro pela tela; todas as contas vêm do `/admin`.
 
 ## Telas
 
@@ -79,7 +82,9 @@ Migrações em `supabase/migrations/`, na ordem:
 5. `0005_delete_order.sql` — `delete_order`: exclui só pedidos entregues/cancelados (em andamento, cancele antes)
 6. `0006_hardening.sql` — limites de tamanho/quantidade com mensagens legíveis, tetos de estoque, EXECUTE revogado das funções internas
 7. `0007_auth.sql` — perfis (`profiles`, trigger em `auth.users`), `require_role()` em toda função, `hide_order` no lugar de `delete_order`, leitura/EXECUTE só para `authenticated`, colunas de auditoria (`created_by`, `user_id`)
+   `0007b_admin_role_enum.sql` — acrescenta `admin` ao enum de perfis (arquivo separado: o valor precisa estar commitado antes do 0008 usá-lo)
 8. `0008_admin.sql` — perfil `admin` (passa em qualquer checagem) e gestão de contas: `admin_list_users`, `admin_create_user`, `admin_update_user`, `admin_set_password`, `admin_delete_user`
+9. `0009_signup_role_fix.sql` — correção de segurança: o perfil de conta nova vem de `raw_app_meta_data`, não do user metadata que o cliente controla (antes, o cadastro público podia criar admin)
 
 Testes (todos com rollback proposital: rodam inteiros numa transação e terminam com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado; sucesso = `0 falhas`):

@@ -38,7 +38,8 @@ create table public.profiles (
 ```
 
 Trigger `after insert on auth.users` cria o perfil:
-- `role` = `raw_user_meta_data->>'role'`; se ausente, pelo domínio do e-mail
+- `role` = `raw_app_meta_data->>'role'` (só o servidor grava; o user metadata é do cliente e
+  não é confiável — ver `0009_signup_role_fix.sql`); se ausente, pelo domínio do e-mail
   (`@lenovo.com` → lenovo, `@dhl.com` → dhl); qualquer outro caso → exceção, conta não é criada.
 - `display_name` = `raw_user_meta_data->>'display_name'`, senão a parte do e-mail antes do `@`.
 

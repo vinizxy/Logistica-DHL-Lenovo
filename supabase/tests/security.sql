@@ -108,6 +108,24 @@ begin
     values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'x@gmail.com', 'x', now(), '{}', '{}', now(), now());
     perform pg_temp.ok(false, 'P16 conta @gmail sem role criada');
   exception when others then perform pg_temp.ok(sqlerrm like '%sem perfil%', 'P16 conta de outro domínio sem role recusada: ' || left(sqlerrm, 60)); end;
+  -- cadastro público pedindo admin no user metadata (campo que o cliente controla)
+  begin
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'intruso@gmail.com', 'x', now(), '{"provider":"email"}', '{"role":"admin"}', now(), now());
+    perform pg_temp.ok(false, 'P17 cadastro @gmail com role=admin no user metadata criado');
+  exception when others then perform pg_temp.ok(sqlerrm like '%sem perfil%', 'P17 cadastro @gmail pedindo admin recusado'); end;
+  declare v_u uuid := gen_random_uuid();
+  begin
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values (v_u, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'intruso@dhl.com', 'x', now(), '{"provider":"email"}', '{"role":"admin"}', now(), now());
+    perform pg_temp.ok((select role = 'dhl' from public.profiles where user_id = v_u), 'P18 cadastro @dhl pedindo admin vira dhl, não admin');
+  end;
+  declare v_u uuid := gen_random_uuid();
+  begin
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values (v_u, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'servidor@exemplo.com', 'x', now(), '{"provider":"email","role":"admin"}', '{}', now(), now());
+    perform pg_temp.ok((select role = 'admin' from public.profiles where user_id = v_u), 'P19 role no app metadata (servidor) é respeitado');
+  end;
 
   -- B. configuração das funções -------------------------------------------------
   select count(*) into n from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
