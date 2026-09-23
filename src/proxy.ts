@@ -35,6 +35,7 @@ export async function proxy(request: NextRequest) {
   // Um redirect aqui seria cacheado pelo prefetch do router e mandaria a pessoa para a
   // página errada; a própria página lida com a sessão (AuthProvider).
   if (!user && error && error.status !== 401 && error.status !== 403 && !/session/i.test(error.message)) {
+    console.error("proxy: falha ao validar sessão, seguindo sem redirecionar:", error.status, error.message);
     return response;
   }
 
@@ -50,8 +51,8 @@ export async function proxy(request: NextRequest) {
   if (!user) return isLogin ? response : redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).maybeSingle();
-  if (!profile) {
-    // Conta sem perfil: derruba a sessão e explica na tela de login.
+  if (!profile || !Object.hasOwn(HOME, profile.role)) {
+    // Conta sem perfil (ou perfil que esta versão não conhece): derruba a sessão e explica no login.
     await supabase.auth.signOut();
     const url = request.nextUrl.clone();
     url.pathname = "/login";

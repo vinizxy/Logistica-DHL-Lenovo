@@ -4,8 +4,9 @@
 import { supabase } from "./supabase";
 import type { Actor, OrderStatus, Result } from "./types";
 
-// Mensagem que o banco devolve quando a sessão não existe/expirou; o AuthProvider
-// escuta isso para mandar para /login.
+// Mensagem que require_role() devolve sem sessão; cleanMessage também a usa para token
+// expirado. O AuthProvider compara com ela (igualdade exata) para mandar para /login.
+// Se mudar o texto no banco, mude aqui também.
 export const LOGIN_REQUIRED = "Faça login para continuar.";
 
 export interface CartItem {
@@ -25,7 +26,7 @@ export async function createOrder(
     p_items: items,
     p_urgent: urgent,
   });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: data as number };
 }
 
@@ -38,20 +39,20 @@ export async function advanceOrder(
     p_order_id: orderId,
     p_eta: eta ?? null,
   });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: data as OrderStatus };
 }
 
 export async function cancelOrder(orderId: number): Promise<Result<null>> {
   const { error } = await supabase.rpc("cancel_order", { p_order_id: orderId });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: null };
 }
 
 // "Excluir" da Lenovo: só oculta da lista dela (entregue/cancelado); a DHL continua vendo.
 export async function hideOrder(orderId: number): Promise<Result<null>> {
   const { error } = await supabase.rpc("hide_order", { p_order_id: orderId });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: null };
 }
 
@@ -60,7 +61,7 @@ export async function restock(serial: string, quantity: number): Promise<Result<
     p_serial: serial,
     p_quantity: quantity,
   });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: data as number };
 }
 
@@ -70,7 +71,7 @@ export async function addComment(orderId: number, body: string): Promise<Result<
     p_order_id: orderId,
     p_body: body,
   });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: data as number };
 }
 
@@ -88,7 +89,7 @@ export async function createBoxModel(input: {
     p_stock_total: input.stockTotal,
     p_min_stock: input.minStock,
   });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: data as string };
 }
 
@@ -106,13 +107,18 @@ export async function updateBoxModel(input: {
     p_min_stock: input.minStock,
     p_active: input.active,
   });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: null };
 }
 
-// PostgREST às vezes prefixa com o código; a mensagem em si já vem legível do banco.
-function cleanMessage(msg: string): string {
-  return msg.replace(/^(P0001|ERROR):?\s*/i, "").trim();
+// Só mostra na tela as mensagens que as funções levantam de propósito (RAISE EXCEPTION =
+// SQLSTATE P0001). Qualquer outro erro do banco fica no console, não na tela.
+function cleanMessage(error: { code?: string; message: string }): string {
+  if (error.code === "PGRST301" || error.code === "PGRST303") return LOGIN_REQUIRED;
+  if (error.code === "P0001") return error.message.replace(/^(P0001|ERROR):?\s*/i, "").trim();
+  console.error("Erro inesperado do banco:", error);
+  if (/fetch|network/i.test(error.message)) return "Sem conexão. Tente de novo.";
+  return "Não foi possível concluir a ação. Tente de novo ou fale com o administrador.";
 }
 
 // ---- Admin: gestão de contas (funções admin_* exigem perfil admin) -------------------
@@ -128,7 +134,7 @@ export interface AdminUser {
 
 export async function adminListUsers(): Promise<Result<AdminUser[]>> {
   const { data, error } = await supabase.rpc("admin_list_users");
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: (data ?? []) as AdminUser[] };
 }
 
@@ -144,24 +150,24 @@ export async function adminCreateUser(input: {
     p_role: input.role,
     p_display_name: input.displayName,
   });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: data as string };
 }
 
 export async function adminUpdateUser(userId: string, role: Actor, displayName: string): Promise<Result<null>> {
   const { error } = await supabase.rpc("admin_update_user", { p_user_id: userId, p_role: role, p_display_name: displayName });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: null };
 }
 
 export async function adminSetPassword(userId: string, password: string): Promise<Result<null>> {
   const { error } = await supabase.rpc("admin_set_password", { p_user_id: userId, p_password: password });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: null };
 }
 
 export async function adminDeleteUser(userId: string): Promise<Result<null>> {
   const { error } = await supabase.rpc("admin_delete_user", { p_user_id: userId });
-  if (error) return { ok: false, error: cleanMessage(error.message) };
+  if (error) return { ok: false, error: cleanMessage(error) };
   return { ok: true, data: null };
 }

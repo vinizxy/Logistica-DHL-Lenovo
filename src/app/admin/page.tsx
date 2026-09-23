@@ -225,7 +225,7 @@ function UserRow({
         >
           <label className="block text-sm">
             <span className="text-ink-2">Senha nova (mín. 8)</span>
-            <input className={input + " mt-1 block w-56"} type="text" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={72} required />
+            <PasswordInput className="mt-1 w-56" value={password} onChange={setPassword} />
           </label>
           <button className={btn.primary} type="submit" disabled={busy || password.length < 8}>{busy ? "Salvando…" : "Definir senha"}</button>
           <button className={btn.secondary} type="button" disabled={busy} onClick={() => { setMode("view"); setPassword(""); }}>
@@ -288,7 +288,7 @@ function CreateUser({ onCreated, onError }: { onCreated: (email: string) => void
         </label>
         <label className="block text-sm">
           <span className="text-ink-2">Senha inicial (mín. 8)</span>
-          <input className={input + " mt-1 w-full"} type="text" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={72} required />
+          <PasswordInput className="mt-1 w-full" value={password} onChange={setPassword} />
         </label>
         <button className={btn.primary + " w-full"} type="submit" disabled={!canSubmit}>
           {busy ? "Criando…" : "Criar conta"}
@@ -296,6 +296,27 @@ function CreateUser({ onCreated, onError }: { onCreated: (email: string) => void
         <p className="text-xs text-muted">A conta já nasce ativa, sem e-mail de confirmação. Passe a senha para a pessoa.</p>
       </form>
     </Section>
+  );
+}
+
+function PasswordInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className={"flex " + className}>
+      <input
+        className={input + " min-w-0 flex-1"}
+        type={show ? "text" : "password"}
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        minLength={8}
+        maxLength={72}
+        required
+      />
+      <button type="button" className={btn.secondary + " ml-1 shrink-0"} onClick={() => setShow((s) => !s)} aria-pressed={show}>
+        {show ? "Ocultar" : "Mostrar"}
+      </button>
+    </span>
   );
 }
 

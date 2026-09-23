@@ -39,12 +39,17 @@ function LoginForm() {
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error || !data.user) {
       setBusy(false);
+      const msg = error?.message.toLowerCase() ?? "";
       setErr(
-        error?.message.toLowerCase().includes("invalid")
+        error?.code === "invalid_credentials" || msg.includes("invalid")
           ? "E-mail ou senha incorretos."
-          : error?.message.toLowerCase().includes("fetch")
-            ? "Sem conexão. Tente de novo."
-            : error?.message ?? "Não foi possível entrar.",
+          : error?.code === "email_not_confirmed"
+            ? "E-mail ainda não confirmado. Fale com o administrador."
+            : error?.status === 429 || error?.code === "over_request_rate_limit"
+              ? "Muitas tentativas. Aguarde alguns minutos e tente de novo."
+              : msg.includes("fetch")
+                ? "Sem conexão. Tente de novo."
+                : "Não foi possível entrar. Tente de novo ou fale com o administrador.",
       );
       return;
     }

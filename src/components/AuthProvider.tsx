@@ -51,13 +51,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [load, router, pathname]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
-    router.replace("/login");
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Falha ao sair:", e);
+    } finally {
+      router.replace("/login");
+    }
   }, [router]);
 
   const handleActionError = useCallback(
     (message: string) => {
-      if (message.startsWith(LOGIN_REQUIRED.slice(0, 10))) void signOut();
+      if (message === LOGIN_REQUIRED) void signOut();
     },
     [signOut],
   );
