@@ -35,7 +35,6 @@ async function call(role, sql, params = []) {
 // Modelo independente: o que o estoque DEVERIA ser.
 const stock = new Map(); // serial → { kind, total, reserved }
 const orders = new Map(); // id → { status, items: [{ serial, qty }] }
-const OPEN = new Set(["enviado", "recebido", "em_separacao"]); // estoque reservado
 const NEXT = { enviado: "recebido", recebido: "em_separacao", em_separacao: "em_transporte", em_transporte: "entregue" };
 const avail = (serial) => stock.get(serial).total - stock.get(serial).reserved;
 
