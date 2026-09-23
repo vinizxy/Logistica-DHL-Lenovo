@@ -76,7 +76,7 @@ function LoginForm() {
     <main className="flex min-h-screen items-center justify-center px-4 py-8">
       <div className="w-full max-w-lg space-y-6">
         <div className="text-center">
-          <h1 className="text-xl font-semibold tracking-tight">Caixas Refurbish</h1>
+          <h1 className="text-xl font-semibold tracking-tight">PackFlow</h1>
           <p className="mt-1 text-sm text-muted">Pedidos e estoque de caixas e cushions — Lenovo × DHL</p>
         </div>
 

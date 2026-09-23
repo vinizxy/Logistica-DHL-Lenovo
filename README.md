@@ -1,4 +1,4 @@
-# Caixas Refurbish — Lenovo × DHL
+# PackFlow — Lenovo × DHL
 
 Sistema de pedidos e estoque de caixas e **cushions** (o acessório que protege a máquina dentro
 da caixa) para o projeto Refurbish da Lenovo (remanufatura de notebooks devolvidos, revendidos

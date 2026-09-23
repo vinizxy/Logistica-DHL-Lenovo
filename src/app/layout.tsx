@@ -10,7 +10,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { Shell } from "@/components/Shell";
 
 export const metadata: Metadata = {
-  title: "Caixas Refurbish — Lenovo × DHL",
+  title: "PackFlow — Lenovo × DHL",
   description: "Pedidos e estoque de caixas e cushions para o projeto Refurbish",
 };
 

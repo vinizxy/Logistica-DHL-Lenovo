@@ -43,7 +43,7 @@ export function Nav() {
             className="h-7 w-auto"
           />
           <span className="border-l border-line-strong pl-3 text-[15px] font-semibold tracking-tight">
-            Caixas Refurbish
+            PackFlow
           </span>
           <span className="hidden text-sm text-muted sm:inline">com DHL</span>
         </Link>
