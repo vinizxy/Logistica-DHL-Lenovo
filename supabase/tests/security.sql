@@ -138,7 +138,10 @@ begin
   select string_agg(p.proname, ', ') into msg from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
    where ns.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'execute')
      and p.proname not in ('create_order','advance_order','cancel_order','hide_order','restock',
-                           'add_comment','create_box_model','update_box_model','status_label');
+                           'add_comment','create_box_model','update_box_model','status_label',
+                           'create_cushion','set_cushion_fits',
+                           'admin_list_users','admin_create_user','admin_update_user',
+                           'admin_set_password','admin_delete_user');
   perform pg_temp.ok(msg is null, 'B2b logado só executa as funções públicas' || coalesce(' (extras: ' || msg || ')', ''));
   select count(*) into n from pg_tables where schemaname = 'public' and not rowsecurity;
   perform pg_temp.ok(n = 0, 'B3 RLS ligado em todas as tabelas (sem: ' || n || ')');
