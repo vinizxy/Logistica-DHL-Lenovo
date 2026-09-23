@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { FitsLine, KindTabs, KindTag } from "@/components/catalog";
 import { advanceOrder, restock } from "@/lib/actions";
+import {
+  buildFitsIndex,
+  countByKind,
+  itemName,
+  matchItem,
+  orderLines,
+  sortCatalog,
+  unitsSummary,
+  type KindFilter,
+} from "@/lib/catalog";
 import { fmtDate, fmtEta, fmtOrderId, isClosed, localDateTimeValue, nextAction, timeAgo } from "@/lib/format";
 import { commentCount, fetchDhlData } from "@/lib/queries";
 import type { BoxModel, Order, OrderStatus } from "@/lib/types";
@@ -36,6 +47,8 @@ export default function DhlPage() {
 
   const orders = useMemo(() => data?.orders ?? [], [data]);
   const boxes = useMemo(() => data?.boxes ?? [], [data]);
+  const bySerial = useMemo(() => new Map(boxes.map((b) => [b.serial, b])), [boxes]);
+  const fitsOf = useMemo(() => buildFitsIndex(data?.fits ?? []), [data]);
   const counts = useMemo(
     () =>
       Object.fromEntries(
@@ -61,7 +74,7 @@ export default function DhlPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Painel DHL</h1>
-          <p className="text-sm text-muted">Armazém — separar, despachar e repor caixas</p>
+          <p className="text-sm text-muted">Armazém — separar, despachar e repor caixas e cushions</p>
         </div>
         {data && (
           <Stats
@@ -130,7 +143,7 @@ export default function DhlPage() {
         )}
       </Section>
 
-      <StockTable boxes={boxes} loading={data === null} onChanged={refetch} />
+      <StockTable boxes={boxes} fitsOf={fitsOf} bySerial={bySerial} loading={data === null} onChanged={refetch} />
     </>
   );
 }
@@ -142,7 +155,6 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
   const [dispatching, setDispatching] = useState(false);
   const [eta, setEta] = useState("");
   const action = nextAction(o.status);
-  const units = o.order_items.reduce((s, i) => s + i.quantity, 0);
   const isNew = o.status === "enviado";
   const isDispatch = action?.next === "em_transporte";
 
@@ -242,17 +254,16 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
           {o.order_items.map((i) => (
             <tr key={i.serial}>
               <td className="num w-14 py-1 font-semibold">{i.quantity} ×</td>
+              <td className="w-20 py-1">{i.box_models && <KindTag kind={i.box_models.kind} small />}</td>
               <td className="mono w-32 py-1">{i.serial}</td>
               <td className="py-1">
-                {i.box_models
-                  ? `${i.box_models.machine_name} ${i.box_models.machine_model}`
-                  : "(caixa removida do catálogo)"}
+                {i.box_models ? itemName(i.box_models) : "(item removido do catálogo)"}
               </td>
             </tr>
           ))}
           <tr>
-            <td colSpan={3} className="py-1 text-xs text-muted">
-              <span className="num">{units}</span> {units === 1 ? "caixa" : "caixas"} no total
+            <td colSpan={4} className="py-1 text-xs text-muted">
+              {unitsSummary(orderLines(o.order_items))} no total
             </td>
           </tr>
         </tbody>
@@ -269,10 +280,14 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
 
 function StockTable({
   boxes,
+  fitsOf,
+  bySerial,
   loading,
   onChanged,
 }: {
   boxes: BoxModel[];
+  fitsOf: Map<string, string[]>;
+  bySerial: Map<string, BoxModel>;
   loading: boolean;
   onChanged: () => void;
 }) {
@@ -280,17 +295,19 @@ function StockTable({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [kind, setKind] = useState<KindFilter>("tudo");
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return boxes;
-    return boxes.filter(
-      (b) =>
-        b.serial.toLowerCase().includes(q) ||
-        b.machine_name.toLowerCase().includes(q) ||
-        b.machine_model.toLowerCase().includes(q),
-    );
-  }, [boxes, search]);
+  const matches = useMemo(
+    () =>
+      sortCatalog(boxes)
+        .map((b) => ({ item: b, ...matchItem(b, search, fitsOf, bySerial) }))
+        .filter((r) => r.match),
+    [boxes, search, fitsOf, bySerial],
+  );
+  const counts = useMemo(() => countByKind(matches.map((r) => r.item)), [matches]);
+  const filtered = kind === "tudo" ? matches : matches.filter((r) => r.item.kind === kind);
+  const machinesOf = (serial: string) =>
+    (fitsOf.get(serial) ?? []).map((s) => bySerial.get(s)).filter((m): m is BoxModel => !!m);
 
   async function doRestock(serial: string) {
     const n = Number.parseInt(qty[serial] ?? "", 10);
@@ -313,14 +330,17 @@ function StockTable({
       flush
       right={
         <input
-          className={input + " w-56"}
-          placeholder="Buscar serial ou máquina"
+          className={input + " w-full sm:w-64"}
+          placeholder="Buscar máquina, serial ou cushion"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Buscar no estoque"
         />
       }
     >
+      <div className="border-b border-line px-2 pt-1">
+        <KindTabs value={kind} onChange={setKind} counts={counts} />
+      </div>
       {err && (
         <div className="p-4 pb-0">
           <ErrorBox message={err} onClose={() => setErr(null)} />
@@ -329,22 +349,30 @@ function StockTable({
       {loading ? (
         <Empty>Carregando…</Empty>
       ) : filtered.length === 0 ? (
-        <Empty>Nenhuma caixa encontrada para “{search}”.</Empty>
+        <Empty>
+          {search.trim()
+            ? `Nada encontrado para “${search}”.`
+            : kind === "cushion"
+              ? "Nenhum cushion no catálogo ainda. Cadastre em Cadastro."
+              : "Nenhum item no catálogo."}
+        </Empty>
       ) : (
         <>
         {/* Celular: lista com os quatro números e a reposição à mão. */}
         <ul className="divide-y divide-line md:hidden">
-          {filtered.map((b) => {
+          {filtered.map(({ item: b, hits }) => {
             const isLow = b.stock_available < b.min_stock;
             return (
               <li key={b.serial} className={"px-4 py-3 " + (b.active ? "" : "opacity-60")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    <KindTag kind={b.kind} small />
                     <div className="font-medium">
                       {b.machine_name} <span className="font-normal text-ink-2">{b.machine_model}</span>
-                      {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuada</span>}
+                      {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuado</span>}
                     </div>
                     <div className="mono">{b.serial}</div>
+                    {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
                   </div>
                   <div className="shrink-0 text-right">
                     <div className={"num text-xl font-semibold leading-none " + (isLow ? "text-amber" : "")}>
@@ -375,7 +403,7 @@ function StockTable({
                     placeholder="0"
                     value={qty[b.serial] ?? ""}
                     onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
-                    aria-label={`Repor ${b.machine_name} ${b.machine_model}`}
+                    aria-label={`Repor ${itemName(b)}`}
                   />
                   <button className={btn.secondary + " flex-1"} type="submit" disabled={busy === b.serial}>
                     Registrar reposição
@@ -390,7 +418,8 @@ function StockTable({
             <thead>
               <tr>
                 <th>Serial</th>
-                <th>Máquina</th>
+                <th>Tipo</th>
+                <th>Nome</th>
                 <th>Modelo</th>
                 <th className="num">Total</th>
                 <th className="num">Reservado</th>
@@ -400,14 +429,18 @@ function StockTable({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => {
+              {filtered.map(({ item: b, hits }) => {
                 const isLow = b.stock_available < b.min_stock;
                 return (
                   <tr key={b.serial} className={b.active ? "" : "opacity-60"}>
                     <td className="mono">{b.serial}</td>
-                    <td className="whitespace-nowrap font-medium">
-                      {b.machine_name}
-                      {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuada</span>}
+                    <td><KindTag kind={b.kind} /></td>
+                    <td>
+                      <div className="whitespace-nowrap font-medium">
+                        {b.machine_name}
+                        {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuado</span>}
+                      </div>
+                      {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
                     </td>
                     <td className="text-ink-2">{b.machine_model}</td>
                     <td className="num text-ink-2">{b.stock_total}</td>
@@ -436,7 +469,7 @@ function StockTable({
                           placeholder="0"
                           value={qty[b.serial] ?? ""}
                           onChange={(e) => setQty({ ...qty, [b.serial]: e.target.value })}
-                          aria-label={`Repor ${b.machine_name} ${b.machine_model}`}
+                          aria-label={`Repor ${itemName(b)}`}
                         />
                         <button className={btn.small} type="submit" disabled={busy === b.serial}>
                           Repor

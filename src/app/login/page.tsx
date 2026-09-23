@@ -77,7 +77,7 @@ function LoginForm() {
       <div className="w-full max-w-lg space-y-6">
         <div className="text-center">
           <h1 className="text-xl font-semibold tracking-tight">Caixas Refurbish</h1>
-          <p className="mt-1 text-sm text-muted">Pedidos e estoque de caixas — Lenovo × DHL</p>
+          <p className="mt-1 text-sm text-muted">Pedidos e estoque de caixas e cushions — Lenovo × DHL</p>
         </div>
 
         {/* Os dois logos são o seletor: clique em quem você é. */}

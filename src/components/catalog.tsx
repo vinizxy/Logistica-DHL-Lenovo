@@ -165,6 +165,7 @@ export function MachinePicker({
                   className={checkbox}
                   checked={selected.has(m.serial)}
                   onChange={() => toggle(m.serial)}
+                  aria-label={itemName(m)}
                 />
                 <span className="min-w-0 flex-1 truncate">
                   {m.machine_name} <span className="text-ink-2">{m.machine_model}</span>

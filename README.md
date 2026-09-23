@@ -1,9 +1,13 @@
 # Caixas Refurbish — Lenovo × DHL
 
-Sistema de pedidos e estoque de caixas para o projeto Refurbish da Lenovo (remanufatura de
-notebooks devolvidos, revendidos no outlet). As caixas ficam no armazém da DHL; a Lenovo
-consulta o estoque e pede; a DHL separa, despacha e repõe. Os dois lados acompanham cada
-pedido em tempo real.
+Sistema de pedidos e estoque de caixas e **cushions** (o acessório que protege a máquina dentro
+da caixa) para o projeto Refurbish da Lenovo (remanufatura de notebooks devolvidos, revendidos
+no outlet). O material fica no armazém da DHL; a Lenovo consulta o estoque e pede; a DHL
+separa, despacha e repõe. Os dois lados acompanham cada pedido em tempo real.
+
+Caixas e cushions vão no mesmo pedido. Um cushion pode servir em várias máquinas: buscar
+pela máquina (ex.: "X1 Carbon") mostra a caixa dela e todos os cushions que servem nela.
+Spec: [docs/specs/2026-09-23-cushion-design.md](docs/specs/2026-09-23-cushion-design.md).
 
 - **Produção:** https://lenovo-dhl-refurbish.vercel.app — deploy manual por enquanto; para deploy automático, conecte o repositório em Vercel → Settings → Git
 - **Spec:** [docs/specs/2026-09-20-lenovo-dhl-refurbish-design.md](docs/specs/2026-09-20-lenovo-dhl-refurbish-design.md)
@@ -39,10 +43,10 @@ gerencia contas em `/admin`. Sem login, a API não lê nem escreve nada.
 |---|---|---|
 | `/login` | — | Entrar como Lenovo ou DHL (o admin entra por qualquer um dos dois) |
 | `/admin` | Admin | Contas: criar, editar perfil/nome, nova senha, excluir |
-| `/lenovo` | Lenovo | Vê estoque disponível (com busca), monta pedido multi-item (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados **da própria lista** (a DHL continua vendo) |
+| `/lenovo` | Lenovo | Vê estoque disponível (filtro Tudo/Caixas/Cushions, busca pela máquina), monta pedido multi-item misturando caixas e cushions (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados **da própria lista** (a DHL continua vendo) |
 | `/dhl` | DHL | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com busca e alerta de mínimo, reposição; histórico permanente |
 | `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários (assinados pelo perfil); a Lenovo confirma a entrega por aqui também |
-| `/cadastro` | DHL | Catálogo de caixas: incluir modelo novo (serial gerado), editar nome/modelo/mínimo, descontinuar/reativar |
+| `/cadastro` | DHL | Catálogo de materiais: incluir caixa ou cushion (serial gerado; cushion com as máquinas em que serve), editar nome/modelo/mínimo, trocar as máquinas de um cushion, descontinuar/reativar |
 
 ## Fluxo de um pedido
 
@@ -85,6 +89,7 @@ Migrações em `supabase/migrations/`, na ordem:
    `0007b_admin_role_enum.sql` — acrescenta `admin` ao enum de perfis (arquivo separado: o valor precisa estar commitado antes do 0008 usá-lo)
 8. `0008_admin.sql` — perfil `admin` (passa em qualquer checagem) e gestão de contas: `admin_list_users`, `admin_create_user`, `admin_update_user`, `admin_set_password`, `admin_delete_user`
 9. `0009_signup_role_fix.sql` — correção de segurança: o perfil de conta nova vem de `raw_app_meta_data`, não do user metadata que o cliente controla (antes, o cadastro público podia criar admin)
+10. `0010_cushion.sql` — cushion no mesmo catálogo (`box_models.kind`), tabela `cushion_fits` (em quais máquinas cada cushion serve), `create_cushion` e `set_cushion_fits` (só DHL); reserva/baixa/cancelamento/reposição seguem nas funções existentes
 
 Testes (todos com rollback proposital: rodam inteiros numa transação e terminam com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado; sucesso = `0 falhas`):
@@ -101,7 +106,9 @@ precisam existir.
   `node --dns-result-order=ipv4first supabase/tests/admin_api.mjs`
 - `supabase/tests/admin.sql` (27) — só admin gerencia contas; ciclo criar → senha → perfil → excluir;
   admin não apaga nem rebaixa a si mesmo; admin opera os dois lados; pedidos sobrevivem à exclusão da conta
-- `supabase/tests/security.sql` (62) — sem login nada lê nem escreve; logado não escreve direto em
+- `supabase/tests/cushion.sql` (22) — cadastro de cushion com máquinas, troca e recusas da lista,
+  perfis, pedido misto caixa + cushion (reserva, baixa no despacho, cancelamento, reposição)
+- `supabase/tests/security.sql` (65) — sem login nada lê nem escreve; logado não escreve direto em
   tabela; cada perfil só executa o que é dele (seção P); funções internas sem EXECUTE; entradas
   hostis recusadas com mensagem legível; invariantes de estoque no banco inteiro
 - `supabase/tests/concurrency.mjs` (19) — pela API, com login: acesso por perfil, 12 pedidos

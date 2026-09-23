@@ -17,7 +17,7 @@ import { btn, Empty, ErrorBox, input, Section, Stats, SuccessBox } from "@/compo
 
 const ROLES: Actor[] = ["lenovo", "dhl", "admin"];
 const ROLE_HINT: Record<Actor, string> = {
-  lenovo: "Pede caixas, cancela, confirma entrega",
+  lenovo: "Pede caixas e cushions, cancela, confirma entrega",
   dhl: "Recebe, separa, despacha, repõe estoque, mantém o catálogo",
   admin: "Tudo isso, mais contas",
 };
@@ -58,7 +58,7 @@ export default function AdminPage() {
             Contas do sistema. Você também acessa os painéis{" "}
             <Link className="underline hover:text-red" href="/lenovo">Lenovo</Link>,{" "}
             <Link className="underline hover:text-red" href="/dhl">DHL</Link> e o{" "}
-            <Link className="underline hover:text-red" href="/cadastro">cadastro de caixas</Link>.
+            <Link className="underline hover:text-red" href="/cadastro">cadastro de materiais</Link>.
           </p>
         </div>
         {users && (

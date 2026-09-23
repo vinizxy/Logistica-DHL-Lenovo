@@ -3,10 +3,21 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { FitsLine, KindTabs, KindTag } from "@/components/catalog";
 import { advanceOrder, cancelOrder, createOrder, hideOrder } from "@/lib/actions";
+import {
+  buildFitsIndex,
+  countByKind,
+  itemName,
+  matchItem,
+  orderLines,
+  sortCatalog,
+  unitsSummary,
+  type KindFilter,
+} from "@/lib/catalog";
 import { canCancel, canDelete, fmtDate, fmtEta, fmtOrderId, isClosed, nextAction } from "@/lib/format";
 import { commentCount, fetchLenovoData } from "@/lib/queries";
-import type { BoxModel, Order } from "@/lib/types";
+import type { BoxModel, ItemKind, Order } from "@/lib/types";
 import { useLiveData } from "@/lib/useLiveData";
 import {
   btn,
@@ -31,12 +42,16 @@ export default function LenovoPage() {
   const [cartError, setCartError] = useState<string | null>(null);
   const [success, setSuccess] = useState<React.ReactNode>(null);
 
-  // Caixas descontinuadas não aparecem para pedir (o banco também recusa).
+  // Itens descontinuados não aparecem para pedir (o banco também recusa).
   const boxes = useMemo(() => (data?.boxes ?? []).filter((b) => b.active), [data]);
   const orders = useMemo(() => data?.orders ?? [], [data]);
   const boxBySerial = useMemo(() => new Map(boxes.map((b) => [b.serial, b])), [boxes]);
+  // Para o "serve em": inclui máquinas descontinuadas, que continuam sendo máquinas reais.
+  const allBySerial = useMemo(() => new Map((data?.boxes ?? []).map((b) => [b.serial, b])), [data]);
+  const fitsOf = useMemo(() => buildFitsIndex(data?.fits ?? []), [data]);
 
-  const available = boxes.reduce((s, b) => s + b.stock_available, 0);
+  const availableOf = (k: ItemKind) =>
+    boxes.filter((b) => b.kind === k).reduce((s, b) => s + b.stock_available, 0);
   const open = orders.filter((o) => !isClosed(o.status)).length;
   const awaiting = orders.filter((o) => o.status === "em_transporte").length;
 
@@ -78,12 +93,13 @@ export default function LenovoPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Painel Lenovo</h1>
-          <p className="text-sm text-muted">Linha de refurbish — pedir caixas ao armazém da DHL</p>
+          <p className="text-sm text-muted">Linha de refurbish — pedir caixas e cushions ao armazém da DHL</p>
         </div>
         {data && (
           <Stats
             items={[
-              { value: available.toLocaleString("pt-BR"), label: "caixas disponíveis" },
+              { value: availableOf("caixa").toLocaleString("pt-BR"), label: "caixas disponíveis" },
+              { value: availableOf("cushion").toLocaleString("pt-BR"), label: "cushions disponíveis" },
               { value: open, label: "pedidos em andamento" },
               { value: awaiting, label: "aguardando sua confirmação", tone: awaiting ? "red" : undefined },
             ]}
@@ -96,7 +112,15 @@ export default function LenovoPage() {
       <SuccessBox message={success} onClose={() => setSuccess(null)} />
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <StockTable boxes={boxes} cart={cart} onSet={setCartQty} onStep={stepCartQty} loading={data === null} />
+        <StockTable
+          boxes={boxes}
+          fitsOf={fitsOf}
+          allBySerial={allBySerial}
+          cart={cart}
+          onSet={setCartQty}
+          onStep={stepCartQty}
+          loading={data === null}
+        />
         <CartPanel
           cart={cart}
           boxBySerial={boxBySerial}
@@ -135,62 +159,81 @@ export default function LenovoPage() {
 
 function StockTable({
   boxes,
+  fitsOf,
+  allBySerial,
   cart,
   onSet,
   onStep,
   loading,
 }: {
   boxes: BoxModel[];
+  fitsOf: Map<string, string[]>;
+  allBySerial: Map<string, BoxModel>;
   cart: Cart;
   onSet: (box: BoxModel, qty: number) => void;
   onStep: (box: BoxModel, delta: number) => void;
   loading: boolean;
 }) {
   const [search, setSearch] = useState("");
+  const [kind, setKind] = useState<KindFilter>("tudo");
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return boxes;
-    return boxes.filter(
-      (b) =>
-        b.serial.toLowerCase().includes(q) ||
-        b.machine_name.toLowerCase().includes(q) ||
-        b.machine_model.toLowerCase().includes(q),
-    );
-  }, [boxes, search]);
+  // Busca primeiro (as abas mostram quantos casaram de cada tipo), depois o filtro de tipo.
+  const matches = useMemo(
+    () =>
+      sortCatalog(boxes)
+        .map((b) => ({ item: b, ...matchItem(b, search, fitsOf, allBySerial) }))
+        .filter((r) => r.match),
+    [boxes, search, fitsOf, allBySerial],
+  );
+  const counts = useMemo(() => countByKind(matches.map((r) => r.item)), [matches]);
+  const filtered = kind === "tudo" ? matches : matches.filter((r) => r.item.kind === kind);
+  const machinesOf = (serial: string) =>
+    (fitsOf.get(serial) ?? []).map((s) => allBySerial.get(s)).filter((m): m is BoxModel => !!m);
 
   return (
     <Section
-      title="Estoque de caixas na DHL"
+      title="Estoque na DHL"
       flush
       right={
         <input
-          className={input + " w-56"}
-          placeholder="Buscar serial ou máquina"
+          className={input + " w-full sm:w-64"}
+          placeholder="Buscar máquina, serial ou cushion"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="Buscar no estoque"
         />
       }
     >
+      <div className="border-b border-line px-2 pt-1">
+        <KindTabs value={kind} onChange={setKind} counts={counts} />
+      </div>
       {loading ? (
         <Empty>Carregando…</Empty>
       ) : filtered.length === 0 ? (
-        <Empty>Nenhuma caixa encontrada para “{search}”.</Empty>
+        <Empty>
+          {search.trim()
+            ? `Nada encontrado para “${search}”.`
+            : kind === "cushion"
+              ? "Nenhum cushion no catálogo ainda. A DHL cadastra em Cadastro."
+              : "Nenhum item no catálogo."}
+        </Empty>
       ) : (
         <>
         {/* Celular: lista de cartões com o que importa à mão (disponível + quantidade no pedido). */}
         <ul className="divide-y divide-line md:hidden">
-          {filtered.map((b) => {
+          {filtered.map(({ item: b, hits }) => {
             const inCart = cart[b.serial] ?? 0;
             const soldOut = b.stock_available <= 0;
             return (
               <li key={b.serial} className={"px-4 py-3 " + (soldOut ? "opacity-50" : "")}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    <KindTag kind={b.kind} small />
                     <div className="font-medium">
                       {b.machine_name} <span className="font-normal text-ink-2">{b.machine_model}</span>
                     </div>
                     <div className="mono">{b.serial}</div>
+                    {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="num text-xl font-semibold leading-none">{b.stock_available}</div>
@@ -205,7 +248,7 @@ function StockTable({
                     max={b.stock_available}
                     onChange={(n) => onSet(b, n)}
                     onStep={(d) => onStep(b, d)}
-                    label={`${b.machine_name} ${b.machine_model}`}
+                    label={itemName(b)}
                     size="lg"
                   />
                   <span className="text-xs text-muted">{inCart > 0 ? "no pedido" : "Toque em + para pedir"}</span>
@@ -219,20 +262,25 @@ function StockTable({
             <thead>
               <tr>
                 <th>Serial</th>
-                <th>Máquina</th>
+                <th>Tipo</th>
+                <th>Nome</th>
                 <th>Modelo</th>
                 <th className="num">Disponível</th>
                 <th className="text-center">No pedido</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => {
+              {filtered.map(({ item: b, hits }) => {
                 const inCart = cart[b.serial] ?? 0;
                 const soldOut = b.stock_available <= 0;
                 return (
                   <tr key={b.serial} className={soldOut ? "opacity-50" : inCart > 0 ? "bg-red-soft/30" : ""}>
                     <td className="mono">{b.serial}</td>
-                    <td className="whitespace-nowrap font-medium">{b.machine_name}</td>
+                    <td><KindTag kind={b.kind} /></td>
+                    <td>
+                      <div className="whitespace-nowrap font-medium">{b.machine_name}</div>
+                      {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
+                    </td>
                     <td className="text-ink-2">{b.machine_model}</td>
                     <td className="num text-base font-semibold">
                       {b.stock_available}
@@ -245,7 +293,7 @@ function StockTable({
                           max={b.stock_available}
                           onChange={(n) => onSet(b, n)}
                           onStep={(d) => onStep(b, d)}
-                          label={`${b.machine_name} ${b.machine_model}`}
+                          label={itemName(b)}
                         />
                       </div>
                     </td>
@@ -371,7 +419,9 @@ function CartPanel({
   const [submitting, setSubmitting] = useState(false);
 
   const entries = Object.entries(cart);
-  const totalUnits = entries.reduce((s, [, q]) => s + q, 0);
+  const summary = unitsSummary(
+    entries.map(([serial, quantity]) => ({ kind: boxBySerial.get(serial)?.kind ?? "caixa", quantity })),
+  );
   const canSubmit = entries.length > 0 && requester.trim().length > 0 && !submitting;
 
   async function submit(e: React.FormEvent) {
@@ -408,7 +458,7 @@ function CartPanel({
       <form className="space-y-4" onSubmit={submit}>
         {entries.length === 0 ? (
           <p className="text-sm text-muted">
-            Use o + na lista de estoque para montar o pedido. Pode ter vários tipos de caixa.
+            Use o + na lista de estoque para montar o pedido. Pode misturar caixas e cushions.
           </p>
         ) : (
           <div className="-mx-4 border-y border-line bg-bg/40">
@@ -419,9 +469,8 @@ function CartPanel({
                   return (
                     <tr key={serial}>
                       <td className="pl-4">
-                        <div className="font-medium">
-                          {b ? `${b.machine_name} ${b.machine_model}` : serial}
-                        </div>
+                        {b && <KindTag kind={b.kind} small />}
+                        <div className="font-medium">{b ? itemName(b) : serial}</div>
                         <div className="mono text-xs">{serial}</div>
                       </td>
                       <td className="w-32">
@@ -430,7 +479,7 @@ function CartPanel({
                           max={b?.stock_available ?? q}
                           onChange={(n) => onQty(serial, n)}
                           onStep={(d) => onStep(serial, d)}
-                          label={b ? `${b.machine_name} ${b.machine_model}` : serial}
+                          label={b ? itemName(b) : serial}
                         />
                       </td>
                       <td className="w-8 pr-4 text-right">
@@ -447,9 +496,8 @@ function CartPanel({
                 })}
                 <tr>
                   <td colSpan={3} className="pl-4 text-xs text-muted">
-                    {entries.length} {entries.length === 1 ? "tipo" : "tipos"} ·{" "}
-                    <span className="num font-medium text-ink-2">{totalUnits}</span>{" "}
-                    {totalUnits === 1 ? "caixa" : "caixas"}
+                    {entries.length} {entries.length === 1 ? "item" : "itens"} no pedido:{" "}
+                    <span className="font-medium text-ink-2">{summary}</span>
                   </td>
                 </tr>
               </tbody>
@@ -491,7 +539,7 @@ function CartPanel({
           <span>
             <span className="font-medium">Urgente</span>
             <span className="block text-xs text-muted">
-              Linha parada esperando caixa. Vai pro topo da fila da DHL.
+              Linha parada esperando material. Vai pro topo da fila da DHL.
             </span>
           </span>
         </label>
@@ -542,7 +590,6 @@ function MyOrders({
         <ul className="divide-y divide-line md:hidden">
           {orders.map((o) => {
             const action = nextAction(o.status);
-            const units = o.order_items.reduce((s, i) => s + i.quantity, 0);
             return (
               <li key={o.id} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
@@ -556,8 +603,7 @@ function MyOrders({
                   <StatusBadge status={o.status} />
                 </div>
                 <div className="mt-0.5 text-sm text-ink-2">
-                  {o.requested_by} · {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} ·{" "}
-                  <span className="num">{units}</span> {units === 1 ? "caixa" : "caixas"}
+                  {o.requested_by} · {unitsSummary(orderLines(o.order_items))}
                 </div>
                 <div className="text-xs text-muted">
                   {fmtDate(o.created_at)}
@@ -624,7 +670,6 @@ function MyOrders({
             <tbody>
               {orders.map((o) => {
                 const action = nextAction(o.status);
-                const units = o.order_items.reduce((s, i) => s + i.quantity, 0);
                 return (
                   <tr key={o.id}>
                     <td>
@@ -641,11 +686,10 @@ function MyOrders({
                     <td className="text-ink-2">
                       <span
                         title={o.order_items
-                          .map((i) => `${i.quantity} × ${i.box_models?.machine_name ?? i.serial}`)
+                          .map((i) => `${i.quantity} × ${i.box_models ? itemName(i.box_models) : i.serial}`)
                           .join("\n")}
                       >
-                        {o.order_items.length} {o.order_items.length === 1 ? "tipo" : "tipos"} ·{" "}
-                        <span className="num">{units}</span> {units === 1 ? "caixa" : "caixas"}
+                        {unitsSummary(orderLines(o.order_items))}
                       </span>
                     </td>
                     <td>

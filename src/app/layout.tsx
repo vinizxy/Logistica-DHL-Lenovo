@@ -11,7 +11,7 @@ import { Shell } from "@/components/Shell";
 
 export const metadata: Metadata = {
   title: "Caixas Refurbish — Lenovo × DHL",
-  description: "Pedidos e estoque de caixas para o projeto Refurbish",
+  description: "Pedidos e estoque de caixas e cushions para o projeto Refurbish",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

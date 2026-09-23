@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { KindTag } from "@/components/catalog";
 import { advanceOrder } from "@/lib/actions";
+import { itemName, orderLines, unitsSummary } from "@/lib/catalog";
 import { ACTOR_LABEL, describeEvent, fmtDate, fmtEta, fmtOrderId } from "@/lib/format";
 import { fetchOrder, fetchOrderComments, fetchOrderEvents } from "@/lib/queries";
 import type { OrderComment, OrderEvent } from "@/lib/types";
@@ -46,7 +48,6 @@ export default function OrderPage() {
   }
 
   const { order, events, comments } = data;
-  const units = order.order_items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <>
@@ -75,18 +76,17 @@ export default function OrderPage() {
       </Section>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2">
-        <Section title={`Itens — ${units} ${units === 1 ? "caixa" : "caixas"}`} flush>
+        <Section title={`Itens — ${unitsSummary(orderLines(order.order_items))}`} flush>
           <table>
             <tbody>
               {order.order_items.map((i) => (
                 <tr key={i.serial}>
                   <td className="num w-16 pl-4 font-semibold">{i.quantity} ×</td>
-                  <td className="mono w-32">{i.serial}</td>
                   <td>
-                    {i.box_models
-                      ? `${i.box_models.machine_name} ${i.box_models.machine_model}`
-                      : "(caixa removida do catálogo)"}
+                    {i.box_models && <KindTag kind={i.box_models.kind} small />}
+                    <div>{i.box_models ? itemName(i.box_models) : "(item removido do catálogo)"}</div>
                   </td>
+                  <td className="mono w-32 pr-4 text-right">{i.serial}</td>
                 </tr>
               ))}
             </tbody>
@@ -141,10 +141,10 @@ function ConfirmDelivery({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border border-red/40 bg-red-soft/40 px-4 py-3">
       <div>
-        <div className="text-sm font-medium">As caixas estão a caminho da Lenovo</div>
+        <div className="text-sm font-medium">O pedido está a caminho da Lenovo</div>
         <div className="text-xs text-muted">
           {eta ? <>Previsão de entrega: <span className="text-ink-2">{fmtEta(eta)}</span>. </> : null}
-          Quando chegarem, confirme aqui para encerrar o pedido.
+          Quando chegar, confirme aqui para encerrar o pedido.
         </div>
         {err && <div className="mt-1 text-xs text-red">{err}</div>}
       </div>
