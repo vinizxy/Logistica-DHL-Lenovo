@@ -46,7 +46,7 @@ gerencia contas em `/admin`. Sem login, a API não lê nem escreve nada.
 | `/lenovo` | Lenovo | Vê estoque disponível (filtro Tudo/Caixas/Cushions, busca pela máquina), monta pedido multi-item misturando caixas e cushions (com − / +), marca urgente, acompanha, confirma entrega, cancela, exclui pedidos encerrados **da própria lista** (a DHL continua vendo) |
 | `/dhl` | DHL | Fila por etapa com urgentes no topo, informa previsão de entrega ao despachar, estoque com busca e alerta de mínimo, reposição; histórico permanente |
 | `/pedido/[id]` | Ambos | Linha do tempo do pedido, previsão de entrega, itens, histórico e comentários (assinados pelo perfil); a Lenovo confirma a entrega por aqui também |
-| `/cadastro` | DHL | Catálogo de materiais: incluir caixa ou cushion (serial gerado; cushion com as máquinas em que serve), editar nome/modelo/mínimo, trocar as máquinas de um cushion, descontinuar/reativar |
+| `/cadastro` | DHL | Catálogo de materiais: incluir caixa (serial gerado se vazio) ou cushion (só o serial e as máquinas em que serve), editar nome/modelo/mínimo, trocar as máquinas de um cushion, descontinuar/reativar |
 
 ## Fluxo de um pedido
 
@@ -90,6 +90,7 @@ Migrações em `supabase/migrations/`, na ordem:
 8. `0008_admin.sql` — perfil `admin` (passa em qualquer checagem) e gestão de contas: `admin_list_users`, `admin_create_user`, `admin_update_user`, `admin_set_password`, `admin_delete_user`
 9. `0009_signup_role_fix.sql` — correção de segurança: o perfil de conta nova vem de `raw_app_meta_data`, não do user metadata que o cliente controla (antes, o cadastro público podia criar admin)
 10. `0010_cushion.sql` — cushion no mesmo catálogo (`box_models.kind`), tabela `cushion_fits` (em quais máquinas cada cushion serve), `create_cushion` e `set_cushion_fits` (só DHL); reserva/baixa/cancelamento/reposição seguem nas funções existentes
+11. `0011_cushion_serial_only.sql` — cushion identificado só pelo serial (obrigatório): `create_cushion(serial, estoque, mínimo, máquinas)`; nome/modelo ficam derivados (`Cushion` + serial) e a edição de cushion só muda mínimo e situação
 
 Testes (todos com rollback proposital: rodam inteiros numa transação e terminam com um
 `RAISE EXCEPTION` contendo o relatório — o banco fica intocado; sucesso = `0 falhas`):
@@ -106,7 +107,7 @@ precisam existir.
   `node --dns-result-order=ipv4first supabase/tests/admin_api.mjs`
 - `supabase/tests/admin.sql` (27) — só admin gerencia contas; ciclo criar → senha → perfil → excluir;
   admin não apaga nem rebaixa a si mesmo; admin opera os dois lados; pedidos sobrevivem à exclusão da conta
-- `supabase/tests/cushion.sql` (22) — cadastro de cushion com máquinas, troca e recusas da lista,
+- `supabase/tests/cushion.sql` (29) — cadastro de cushion pelo serial com máquinas, troca e recusas da lista,
   perfis, pedido misto caixa + cushion (reserva, baixa no despacho, cancelamento, reposição)
 - `supabase/tests/security.sql` (64) — sem login nada lê nem escreve; logado não escreve direto em
   tabela; cada perfil só executa o que é dele (seção P); funções internas sem EXECUTE; entradas

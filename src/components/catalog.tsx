@@ -31,6 +31,21 @@ export function KindTag({ kind, small }: { kind: ItemKind; small?: boolean }) {
   );
 }
 
+/**
+ * Título de um item nas listas: caixa pelo nome e modelo da máquina; cushion pelo serial,
+ * que é como ele é identificado.
+ */
+export function ItemTitle({ item, className = "" }: { item: BoxModel; className?: string }) {
+  if (item.kind === "cushion") {
+    return <div className={"font-mono font-medium tracking-wide " + className}>{item.serial}</div>;
+  }
+  return (
+    <div className={"font-medium " + className}>
+      {item.machine_name} <span className="font-normal text-ink-2">{item.machine_model}</span>
+    </div>
+  );
+}
+
 const TABS: { key: KindFilter; label: string }[] = [
   { key: "tudo", label: "Tudo" },
   { key: "caixa", label: KIND_LABEL.caixa.tab },

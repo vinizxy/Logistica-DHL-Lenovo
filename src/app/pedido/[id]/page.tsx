@@ -84,7 +84,11 @@ export default function OrderPage() {
                   <td className="num w-16 pl-4 font-semibold">{i.quantity} ×</td>
                   <td>
                     {i.box_models && <KindTag kind={i.box_models.kind} small />}
-                    <div>{i.box_models ? itemName(i.box_models) : "(item removido do catálogo)"}</div>
+                    {!i.box_models ? (
+                      <div>(item removido do catálogo)</div>
+                    ) : (
+                      i.box_models.kind === "caixa" && <div>{itemName(i.box_models)}</div>
+                    )}
                   </td>
                   <td className="mono w-32 pr-4 text-right">{i.serial}</td>
                 </tr>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { FitsLine, KindTabs, KindTag } from "@/components/catalog";
+import { FitsLine, ItemTitle, KindTabs, KindTag } from "@/components/catalog";
 import { advanceOrder, restock } from "@/lib/actions";
 import {
   buildFitsIndex,
@@ -257,7 +257,9 @@ function OrderCard({ order: o, onChanged }: { order: Order; onChanged: () => voi
               <td className="w-20 py-1">{i.box_models && <KindTag kind={i.box_models.kind} small />}</td>
               <td className="mono w-32 py-1">{i.serial}</td>
               <td className="py-1">
-                {i.box_models ? itemName(i.box_models) : "(item removido do catálogo)"}
+                {!i.box_models
+                  ? "(item removido do catálogo)"
+                  : i.box_models.kind === "caixa" && itemName(i.box_models)}
               </td>
             </tr>
           ))}
@@ -367,12 +369,13 @@ function StockTable({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <KindTag kind={b.kind} small />
-                    <div className="font-medium">
-                      {b.machine_name} <span className="font-normal text-ink-2">{b.machine_model}</span>
-                      {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuado</span>}
-                    </div>
-                    <div className="mono">{b.serial}</div>
-                    {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
+                    {!b.active && <span className="ml-2 text-xs text-muted">descontinuado</span>}
+                    <ItemTitle item={b} />
+                    {b.kind === "cushion" ? (
+                      <FitsLine machines={machinesOf(b.serial)} hits={hits} />
+                    ) : (
+                      <div className="mono">{b.serial}</div>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <div className={"num text-xl font-semibold leading-none " + (isLow ? "text-amber" : "")}>
@@ -419,7 +422,7 @@ function StockTable({
               <tr>
                 <th>Serial</th>
                 <th>Tipo</th>
-                <th>Nome</th>
+                <th>Máquina</th>
                 <th>Modelo</th>
                 <th className="num">Total</th>
                 <th className="num">Reservado</th>
@@ -436,13 +439,14 @@ function StockTable({
                     <td className="mono">{b.serial}</td>
                     <td><KindTag kind={b.kind} /></td>
                     <td>
-                      <div className="whitespace-nowrap font-medium">
-                        {b.machine_name}
-                        {!b.active && <span className="ml-2 text-xs font-normal text-muted">descontinuado</span>}
-                      </div>
-                      {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
+                      {b.kind === "cushion" ? (
+                        <FitsLine machines={machinesOf(b.serial)} hits={hits} />
+                      ) : (
+                        <div className="whitespace-nowrap font-medium">{b.machine_name}</div>
+                      )}
+                      {!b.active && <span className="text-xs text-muted">descontinuado</span>}
                     </td>
-                    <td className="text-ink-2">{b.machine_model}</td>
+                    <td className="text-ink-2">{b.kind === "cushion" ? <span className="text-muted">—</span> : b.machine_model}</td>
                     <td className="num text-ink-2">{b.stock_total}</td>
                     <td className="num text-muted">{b.stock_reserved}</td>
                     <td className={"num text-base font-semibold " + (isLow ? "text-amber" : "")}>

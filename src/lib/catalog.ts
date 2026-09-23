@@ -11,6 +11,8 @@ export const KIND_LABEL: Record<ItemKind, { one: string; many: string; tab: stri
 
 type Named = Pick<BoxModel, "machine_name" | "machine_model">;
 
+// Para cushion o banco guarda nome "Cushion" e modelo = serial, então isto lê
+// "Cushion 5M11C12345"; caixa lê "ThinkPad X1 Carbon Gen 12".
 export function itemName(b: Named): string {
   return `${b.machine_name} ${b.machine_model}`;
 }

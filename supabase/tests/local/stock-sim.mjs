@@ -68,7 +68,7 @@ for (let i = 1; i <= 3; i++) {
   const total = int(0, 120);
   const fits = boxes.filter(() => rand() < 0.6);
   if (fits.length === 0) fits.push(boxes[0]);
-  const r = await call("dhl", "select public.create_cushion(null, $1, 'sim', $2, 10, $3::text[])", [`Sim Cushion ${i}`, total, fits]);
+  const r = await call("dhl", "select public.create_cushion($1, $2, 10, $3::text[])", [`SIMCUSH00${i}`, total, fits]);
   if (!r.ok) throw new Error(`cadastro de cushion falhou: ${r.error}`);
   cushions.push(r.value);
   stock.set(r.value, { kind: "cushion", total, reserved: 0 });

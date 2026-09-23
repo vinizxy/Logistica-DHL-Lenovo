@@ -24,18 +24,28 @@ begin
   b1 := public.create_box_model(null, 'Cush Máquina A', 'g1', 100, 0);
   b2 := public.create_box_model(null, 'Cush Máquina B', 'g1', 100, 0);
   b3 := public.create_box_model(null, 'Cush Máquina C', 'g1', 100, 0);
-  c := public.create_cushion(null, 'Cushion lateral 14', 'CL-14', 60, 5, array[b1, b2]);
+  -- Cushion é identificado só pelo serial (sem nome nem modelo próprios).
+  c := public.create_cushion(' cushtest01 ', 60, 5, array[b1, b2]);
   select * into cm from public.box_models where serial = c;
-  perform pg_temp.ok(cm.kind = 'cushion' and cm.machine_name = 'Cushion lateral 14' and cm.stock_total = 60,
-    'C1 cushion cadastrado (kind=' || cm.kind || ')');
+  perform pg_temp.ok(c = 'CUSHTEST01' and cm.kind = 'cushion' and cm.stock_total = 60 and cm.min_stock = 5,
+    'C1 cushion cadastrado pelo serial (' || coalesce(c, 'null') || ')');
+  perform pg_temp.ok(cm.machine_name = 'Cushion' and cm.machine_model = c, 'C1c nome/modelo derivados: ' || cm.machine_name || ' ' || cm.machine_model);
   perform pg_temp.ok((select count(*) = 2 from public.cushion_fits where cushion_serial = c), 'C1b serve em 2 máquinas');
   perform pg_temp.ok((select kind = 'caixa' from public.box_models where serial = b1), 'C2 caixa nova nasce kind=caixa');
 
-  begin perform public.create_cushion(null, 'Sem máquina', 'x', 1, 0, '{}'); perform pg_temp.ok(false, 'C3 cushion sem máquina criado');
+  begin perform public.create_cushion('CUSHTEST02', 1, 0, '{}'); perform pg_temp.ok(false, 'C3 cushion sem máquina criado');
   exception when others then perform pg_temp.ok(sqlerrm like 'Marque pelo menos uma máquina%', 'C3 sem máquina recusado: ' || sqlerrm); end;
-  perform pg_temp.ok((select count(*) = 0 from public.box_models where machine_name = 'Sem máquina'), 'C3b nada gravado');
-  begin perform public.create_cushion(null, '  ', 'x', 1, 0, array[b1]); perform pg_temp.ok(false, 'C4 nome vazio aceito');
-  exception when others then perform pg_temp.ok(sqlerrm = 'Informe o nome do cushion.', 'C4 nome vazio recusado: ' || sqlerrm); end;
+  perform pg_temp.ok((select count(*) = 0 from public.box_models where serial = 'CUSHTEST02'), 'C3b nada gravado');
+  begin perform public.create_cushion('  ', 1, 0, array[b1]); perform pg_temp.ok(false, 'C4 serial vazio aceito');
+  exception when others then perform pg_temp.ok(sqlerrm = 'Informe o serial do cushion.', 'C4 serial vazio recusado: ' || sqlerrm); end;
+  begin perform public.create_cushion(null, 1, 0, array[b1]); perform pg_temp.ok(false, 'C4b serial nulo aceito');
+  exception when others then perform pg_temp.ok(sqlerrm = 'Informe o serial do cushion.', 'C4b serial nulo recusado'); end;
+  begin perform public.create_cushion('ABC', 1, 0, array[b1]); perform pg_temp.ok(false, 'C4c serial curto aceito');
+  exception when others then perform pg_temp.ok(sqlerrm like 'O serial precisa ter exatamente 10%', 'C4c serial curto recusado: ' || sqlerrm); end;
+  begin perform public.create_cushion(c, 1, 0, array[b1]); perform pg_temp.ok(false, 'C4d serial repetido aceito');
+  exception when others then perform pg_temp.ok(sqlerrm like 'Já existe%' || c || '%', 'C4d serial repetido recusado: ' || sqlerrm); end;
+  begin perform public.create_cushion(b1, 1, 0, array[b2]); perform pg_temp.ok(false, 'C4e serial de caixa reaproveitado');
+  exception when others then perform pg_temp.ok(sqlerrm like 'Já existe%', 'C4e serial de uma caixa recusado'); end;
 
   -- Troca da lista ---------------------------------------------------------------------
   n := public.set_cushion_fits(c, array[b1, b2, b3]);
@@ -48,7 +58,7 @@ begin
   perform pg_temp.ok((select count(*) = 1 from public.cushion_fits where cushion_serial = c), 'C6b lista anterior preservada');
   begin perform public.set_cushion_fits(c, array['NAOEXISTE1']); perform pg_temp.ok(false, 'C7 serial inexistente aceito');
   exception when others then perform pg_temp.ok(sqlerrm like 'Máquina não encontrada%NAOEXISTE1%', 'C7 serial inexistente recusado: ' || sqlerrm); end;
-  c2 := public.create_cushion(null, 'Cushion canto', 'CC-1', 10, 0, array[b1]);
+  c2 := public.create_cushion('CUSHTEST04', 10, 0, array[b1]);
   begin perform public.set_cushion_fits(c, array[c2]); perform pg_temp.ok(false, 'C8 ligado a outro cushion');
   exception when others then perform pg_temp.ok(sqlerrm like 'Máquina não encontrada%', 'C8 ligar a outro cushion recusado'); end;
   begin perform public.set_cushion_fits(b1, array[b2]); perform pg_temp.ok(false, 'C9 caixa virou cushion');
@@ -60,7 +70,7 @@ begin
 
   -- Perfis -----------------------------------------------------------------------------
   perform pg_temp.as_lenovo();
-  begin perform public.create_cushion(null, 'Da Lenovo', 'x', 1, 0, array[b1]); perform pg_temp.ok(false, 'C11 Lenovo cadastrou cushion');
+  begin perform public.create_cushion('CUSHLENOV1', 1, 0, array[b1]); perform pg_temp.ok(false, 'C11 Lenovo cadastrou cushion');
   exception when others then perform pg_temp.ok(sqlerrm like '%DHL%', 'C11 Lenovo não cadastra cushion: ' || sqlerrm); end;
   begin perform public.set_cushion_fits(c, array[b1]); perform pg_temp.ok(false, 'C12 Lenovo trocou máquinas');
   exception when others then perform pg_temp.ok(sqlerrm like '%DHL%', 'C12 Lenovo não troca máquinas'); end;
@@ -94,7 +104,16 @@ begin
   n := public.restock(c, 30);
   perform pg_temp.ok(n = 82, 'C16 reposição de cushion soma (' || n || ')');
 
-  perform public.update_box_model(c2, 'Cushion canto', 'CC-1', 0, false);
+  -- Editar cushion só muda mínimo/situação: nome e modelo continuam derivados do serial.
+  perform public.update_box_model(c, 'Outro nome', 'Outro modelo', 7, true);
+  select * into cm from public.box_models where serial = c;
+  perform pg_temp.ok(cm.machine_name = 'Cushion' and cm.machine_model = c and cm.min_stock = 7,
+    'C18 editar cushion mantém nome/modelo e muda o mínimo (' || cm.machine_name || ' ' || cm.machine_model || ')');
+  perform public.update_box_model(b1, 'Cush Máquina A2', 'g2', 3, true);
+  perform pg_temp.ok((select machine_name = 'Cush Máquina A2' and machine_model = 'g2' from public.box_models where serial = b1),
+    'C18b editar caixa continua mudando nome/modelo');
+
+  perform public.update_box_model(c2, 'Cushion', c2, 0, false);
   perform pg_temp.as_lenovo();
   begin
     perform public.create_order('Tester', null, jsonb_build_array(jsonb_build_object('serial', c2, 'quantity', 1)));

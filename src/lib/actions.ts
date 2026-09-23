@@ -111,19 +111,16 @@ export async function updateBoxModel(input: {
   return { ok: true, data: null };
 }
 
-// Cushion nasce já com as máquinas em que serve (seriais das caixas delas).
+// Cushion é identificado só pelo serial e nasce já com as máquinas em que serve
+// (seriais das caixas delas).
 export async function createCushion(input: {
   serial: string;
-  name: string;
-  model: string;
   stockTotal: number;
   minStock: number;
   machines: string[];
 }): Promise<Result<string>> {
   const { data, error } = await supabase.rpc("create_cushion", {
     p_serial: input.serial,
-    p_name: input.name,
-    p_model: input.model,
     p_stock_total: input.stockTotal,
     p_min_stock: input.minStock,
     p_box_serials: input.machines,

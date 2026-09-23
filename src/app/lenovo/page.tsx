@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { FitsLine, KindTabs, KindTag } from "@/components/catalog";
+import { FitsLine, ItemTitle, KindTabs, KindTag } from "@/components/catalog";
 import { advanceOrder, cancelOrder, createOrder, hideOrder } from "@/lib/actions";
 import {
   buildFitsIndex,
@@ -229,11 +229,12 @@ function StockTable({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <KindTag kind={b.kind} small />
-                    <div className="font-medium">
-                      {b.machine_name} <span className="font-normal text-ink-2">{b.machine_model}</span>
-                    </div>
-                    <div className="mono">{b.serial}</div>
-                    {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
+                    <ItemTitle item={b} />
+                    {b.kind === "cushion" ? (
+                      <FitsLine machines={machinesOf(b.serial)} hits={hits} />
+                    ) : (
+                      <div className="mono">{b.serial}</div>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="num text-xl font-semibold leading-none">{b.stock_available}</div>
@@ -263,7 +264,7 @@ function StockTable({
               <tr>
                 <th>Serial</th>
                 <th>Tipo</th>
-                <th>Nome</th>
+                <th>Máquina</th>
                 <th>Modelo</th>
                 <th className="num">Disponível</th>
                 <th className="text-center">No pedido</th>
@@ -277,11 +278,17 @@ function StockTable({
                   <tr key={b.serial} className={soldOut ? "opacity-50" : inCart > 0 ? "bg-red-soft/30" : ""}>
                     <td className="mono">{b.serial}</td>
                     <td><KindTag kind={b.kind} /></td>
-                    <td>
-                      <div className="whitespace-nowrap font-medium">{b.machine_name}</div>
-                      {b.kind === "cushion" && <FitsLine machines={machinesOf(b.serial)} hits={hits} />}
-                    </td>
-                    <td className="text-ink-2">{b.machine_model}</td>
+                    {b.kind === "cushion" ? (
+                      <>
+                        <td><FitsLine machines={machinesOf(b.serial)} hits={hits} /></td>
+                        <td className="text-muted">—</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="whitespace-nowrap font-medium">{b.machine_name}</td>
+                        <td className="text-ink-2">{b.machine_model}</td>
+                      </>
+                    )}
                     <td className="num text-base font-semibold">
                       {b.stock_available}
                       {soldOut && <span className="ml-1.5 text-xs font-normal text-red">esgotado</span>}
@@ -469,9 +476,15 @@ function CartPanel({
                   return (
                     <tr key={serial}>
                       <td className="pl-4">
-                        {b && <KindTag kind={b.kind} small />}
-                        <div className="font-medium">{b ? itemName(b) : serial}</div>
-                        <div className="mono text-xs">{serial}</div>
+                        {b ? (
+                          <>
+                            <KindTag kind={b.kind} small />
+                            <ItemTitle item={b} />
+                            {b.kind === "caixa" && <div className="mono text-xs">{serial}</div>}
+                          </>
+                        ) : (
+                          <div className="mono">{serial}</div>
+                        )}
                       </td>
                       <td className="w-32">
                         <QtyStepper

@@ -86,7 +86,9 @@ function NewItemForm({ machines, onCreated }: { machines: BoxModel[]; onCreated:
   const [ok, setOk] = useState<React.ReactNode>(null);
 
   const isCushion = kind === "cushion";
-  const canSubmit = name.trim() && model.trim() && (!isCushion || fits.length > 0) && !busy;
+  // Cushion é identificado só pelo serial (obrigatório); caixa pelo nome e modelo da máquina.
+  const serialOk = /^[A-Za-z0-9]{10}$/.test(serial.trim());
+  const canSubmit = (isCushion ? serialOk && fits.length > 0 : name.trim() && model.trim()) && !busy;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -100,15 +102,22 @@ function NewItemForm({ machines, onCreated }: { machines: BoxModel[]; onCreated:
       minStock: Number.parseInt(minStock || "0", 10),
     };
     const r = isCushion
-      ? await createCushion({ ...base, name: name.trim(), model: model.trim(), machines: fits })
+      ? await createCushion({ ...base, machines: fits })
       : await createBoxModel({ ...base, machineName: name.trim(), machineModel: model.trim() });
     setBusy(false);
     if (r.ok) {
       setOk(
-        <>
-          {isCushion ? "Cushion" : "Caixa"} {name.trim()} {model.trim()} {isCushion ? "incluído" : "incluída"} no
-          catálogo com o serial <span className="mono text-ink">{r.data}</span>.
-        </>,
+        isCushion ? (
+          <>
+            Cushion <span className="mono text-ink">{r.data}</span> incluído no catálogo, servindo em {fits.length}{" "}
+            {fits.length === 1 ? "máquina" : "máquinas"}.
+          </>
+        ) : (
+          <>
+            Caixa {name.trim()} {model.trim()} incluída no catálogo com o serial{" "}
+            <span className="mono text-ink">{r.data}</span>.
+          </>
+        ),
       );
       setName("");
       setModel("");
@@ -142,39 +151,49 @@ function NewItemForm({ machines, onCreated }: { machines: BoxModel[]; onCreated:
           ))}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_160px_110px_110px]">
+        <div
+          className={
+            "grid gap-3 sm:grid-cols-2 " +
+            (isCushion ? "lg:grid-cols-[200px_110px_110px]" : "lg:grid-cols-[1fr_1fr_160px_110px_110px]")
+          }
+        >
+          {!isCushion && (
+            <>
+              <label className="block text-sm">
+                <span className="text-ink-2">Máquina</span>
+                <input
+                  className={input + " mt-1 w-full"}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex.: ThinkPad T16"
+                  maxLength={80}
+                  required
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-ink-2">Modelo</span>
+                <input
+                  className={input + " mt-1 w-full"}
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="Ex.: Gen 3"
+                  maxLength={80}
+                  required
+                />
+              </label>
+            </>
+          )}
           <label className="block text-sm">
-            <span className="text-ink-2">{isCushion ? "Nome do cushion" : "Máquina"}</span>
-            <input
-              className={input + " mt-1 w-full"}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={isCushion ? "Ex.: Cushion lateral 14 pol." : "Ex.: ThinkPad T16"}
-              maxLength={80}
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="text-ink-2">Modelo</span>
-            <input
-              className={input + " mt-1 w-full"}
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder={isCushion ? "Ex.: CL-14" : "Ex.: Gen 3"}
-              maxLength={80}
-              required
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="text-ink-2">Serial (opcional)</span>
+            <span className="text-ink-2">{isCushion ? "Serial do cushion" : "Serial (opcional)"}</span>
             <input
               className={input + " mono mt-1 w-full uppercase placeholder:normal-case"}
               value={serial}
               onChange={(e) => setSerial(e.target.value.toUpperCase())}
-              placeholder="gerado se vazio"
+              placeholder={isCushion ? "10 letras ou números" : "gerado se vazio"}
               maxLength={10}
               pattern="[A-Za-z0-9]{10}"
               title="10 letras ou números"
+              required={isCushion}
             />
           </label>
           <label className="block text-sm">
@@ -211,7 +230,7 @@ function NewItemForm({ machines, onCreated }: { machines: BoxModel[]; onCreated:
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs text-muted">
             {isCushion
-              ? "Marque todas as máquinas em que este cushion serve: a Lenovo acha o cushion buscando pela máquina."
+              ? "O cushion é identificado só pelo serial. Marque todas as máquinas em que ele serve: a Lenovo acha o cushion buscando pela máquina."
               : "O serial identifica o tipo de caixa (10 caracteres). Deixe em branco para gerar um automaticamente."}
           </span>
           <button className={btn.primary} type="submit" disabled={!canSubmit}>
@@ -290,7 +309,7 @@ function Catalog({
               <tr>
                 <th>Serial</th>
                 <th>Tipo</th>
-                <th>Nome</th>
+                <th>Máquina</th>
                 <th>Modelo</th>
                 <th className="num">Total</th>
                 <th className="num">Disponível</th>
@@ -369,11 +388,17 @@ function CatalogRow({
       <tr className={b.active ? "" : "opacity-60"}>
         <td className="mono">{b.serial}</td>
         <td><KindTag kind={b.kind} /></td>
-        <td>
-          <div className="whitespace-nowrap font-medium">{b.machine_name}</div>
-          {b.kind === "cushion" && <FitsLine machines={fits} hits={new Set()} />}
-        </td>
-        <td className="text-ink-2">{b.machine_model}</td>
+        {b.kind === "cushion" ? (
+          <>
+            <td><FitsLine machines={fits} hits={new Set()} /></td>
+            <td className="text-muted">—</td>
+          </>
+        ) : (
+          <>
+            <td className="whitespace-nowrap font-medium">{b.machine_name}</td>
+            <td className="text-ink-2">{b.machine_model}</td>
+          </>
+        )}
         <td className="num text-ink-2">{b.stock_total}</td>
         <td className="num font-semibold">{b.stock_available}</td>
         <td className="num text-muted">{b.min_stock}</td>
@@ -488,12 +513,20 @@ function EditRow({
     <tr className="bg-surface-2">
       <td className="mono">{b.serial}</td>
       <td><KindTag kind={b.kind} /></td>
-      <td>
-        <input className={input + " w-44"} value={name} onChange={(e) => setName(e.target.value)} aria-label="Nome" />
-      </td>
-      <td>
-        <input className={input + " w-28"} value={model} onChange={(e) => setModel(e.target.value)} aria-label="Modelo" />
-      </td>
+      {b.kind === "cushion" ? (
+        <td colSpan={2} className="text-xs text-muted">
+          Cushion é identificado pelo serial; para mudar as máquinas, use o botão Máquinas.
+        </td>
+      ) : (
+        <>
+          <td>
+            <input className={input + " w-44"} value={name} onChange={(e) => setName(e.target.value)} aria-label="Máquina" />
+          </td>
+          <td>
+            <input className={input + " w-28"} value={model} onChange={(e) => setModel(e.target.value)} aria-label="Modelo" />
+          </td>
+        </>
+      )}
       <td className="num text-ink-2">{b.stock_total}</td>
       <td className="num font-semibold">{b.stock_available}</td>
       <td className="num">

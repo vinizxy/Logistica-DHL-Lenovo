@@ -66,6 +66,15 @@ refatorar tudo para "materiais" (mudança grande demais agora; fica como evoluç
 - `security.sql` B2b: incluir as funções novas na lista permitida.
 - App: lint, tipos, build e verificação no navegador.
 
+## 5b. Revisão (2026-09-23, pedido do usuário)
+
+O cushion passa a ser identificado **só pelo serial**: o cadastro pede serial (obrigatório,
+10 letras ou números), máquinas, estoque e mínimo — sem nome nem modelo. No banco
+(`0011_cushion_serial_only.sql`), `machine_name = 'Cushion'` e `machine_model = serial` ficam
+derivados, para as mensagens das funções de pedido lerem "Cushion 5M11C12345: …";
+`update_box_model` ignora nome/modelo quando o item é cushion. Nas telas, o cushion aparece
+pelo serial e pela linha "serve em".
+
 ## 6. Fora de escopo
 
 Controle do corredor (retirada por QR Code), quantidade de cushions por caixa, sugestão
