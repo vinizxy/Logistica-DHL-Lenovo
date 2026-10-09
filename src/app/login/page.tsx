@@ -86,10 +86,7 @@ function LoginForm() {
             <Image src="/lenovo-logo.png" alt="Lenovo" width={389} height={129} priority className="h-10 w-auto" />
           </SideCard>
           <SideCard active={side === "dhl"} onClick={() => setSide("dhl")} label="DHL">
-            {/* Logo em public/dhl-logo.png, sobre o amarelo da marca. */}
-            <span className="flex h-10 items-center bg-[#FFCC00] px-3">
-              <Image src="/dhl-logo.png" alt="DHL" width={1963} height={283} priority className="h-5 w-auto" />
-            </span>
+            <span className="flex h-10 items-center px-3 text-xl font-bold tracking-tight">DHL</span>
           </SideCard>
         </div>
 
